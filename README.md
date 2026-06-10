@@ -20,9 +20,9 @@ edge.
 | Service | Path | Role |
 |---------|------|------|
 | `normalization-service` | `app/normalization-service/` | Unified GraphQL → REST fan-out |
-| `facebook-service` | `app/facebook-service/` | Meta Graph API (Messenger, Pages) |
+| `facebook-service` | `app/facebook-service/` | Meta Graph API — Page post CRUD ([setup](app/facebook-service/SETUP.md)) |
 | `instagram-service` | `app/instagram-service/` | Meta Graph API (Instagram DM) |
-| `line-service` | `app/line-service/` | LINE Messaging API |
+| `line-service` | `app/line-service/` | LINE Messaging API ([setup](app/line-service/SETUP.md)) |
 | *future* | `app/<platform>-service/` | One folder per new provider |
 
 Each service is **independently deployable** (own `cmd/main.go`, config, Dockerfile, port).
@@ -70,7 +70,10 @@ imports another service's `internal/` packages.
 ```
 communication-service/
 ├─ go.mod
+├─ docker-compose.yml
+├─ .env.example
 ├─ app/
+│  ├─ gateway/                    # Spring Cloud Gateway (Java)
 │  ├─ normalization-service/
 │  │  ├─ cmd/main.go
 │  │  ├─ internal/graphql/     # schema + resolvers (gqlgen)
@@ -141,30 +144,35 @@ matching service.
 
 ### Run locally
 
-From the repo root:
-
 ```bash
+cp .env.example .env
 go mod download
 
-# run services (platform services first, then normalization)
-go run ./app/facebook-service/cmd
-go run ./app/line-service/cmd
-go run ./app/instagram-service/cmd
-go run ./app/normalization-service/cmd
+# terminal 1 — Postgres required on DATABASE_URL (default port 5433 via docker-compose)
+go run ./app/line-service/cmd/main.go
+
+# terminal 2
+go run ./app/normalization-service/cmd/main.go
+
+# terminal 3 — Java 21 + Maven
+cd app/gateway && mvn spring-boot:run
 ```
 
-Health checks: normalization `GET /healthz` · platform `GET /api/v1/healthz`
+Health checks: gateway `GET /comms/healthz` · normalization `GET :8090/healthz` · line `GET :8083/api/v1/healthz`
 
-### Docker
-
-Build and run per service:
+### Docker Compose (full stack)
 
 ```bash
-docker build -f app/facebook-service/Dockerfile -t facebook-service .
-docker run --env-file app/facebook-service/.env -p 8081:8081 facebook-service
+cp .env.example .env
+docker compose up --build
 ```
 
-*(Dockerfiles to be added when services are scaffolded.)*
+| Service | URL |
+|---------|-----|
+| Gateway | http://localhost:8080 |
+| GraphQL playground | http://localhost:8090/graphql (when `PLAYGROUND_ENABLED=true`) |
+| LINE service (internal) | http://localhost:8083 |
+| Postgres | localhost:5433 |
 
 ## API overview
 

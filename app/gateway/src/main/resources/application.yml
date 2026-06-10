@@ -1,0 +1,56 @@
+server:
+  port: ${GATEWAY_PORT:8080}
+
+spring:
+  application:
+    name: communication-gateway
+
+  main:
+    web-application-type: reactive
+
+  cloud:
+    gateway:
+      forwarded:
+        enabled: true
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials Access-Control-Allow-Methods Access-Control-Allow-Headers, RETAIN_FIRST
+      routes:
+        - id: comms-graphql
+          uri: ${NORMALIZATION_SERVICE_URI:http://localhost:8090}
+          predicates:
+            - Path=/comms/graphql
+          filters:
+            - RewritePath=/comms/graphql, /graphql
+
+        - id: comms-healthz
+          uri: ${NORMALIZATION_SERVICE_URI:http://localhost:8090}
+          predicates:
+            - Path=/comms/healthz
+          filters:
+            - RewritePath=/comms/healthz, /healthz
+
+        - id: comms-proxy
+          uri: ${NORMALIZATION_SERVICE_URI:http://localhost:8090}
+          predicates:
+            - Path=/comms/**
+          filters:
+            - name: RewritePath
+              args:
+                regexp: /comms/(?<segment>.*)
+                replacement: /proxy/${segment}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+gateway:
+  sharedSecret: ${GATEWAY_SECRET:hello}
+  auth:
+    userIdClaim: ${GATEWAY_USER_ID_CLAIM:sub}
+    tenantIdClaim: ${GATEWAY_TENANT_ID_CLAIM:tenant_id}
+  cors:
+    allowedOrigins: ${GATEWAY_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
+  jwt:
+    hmacSecret: ${GATEWAY_JWT_HMAC_SECRET:comms-local-dev-jwt-hmac-secret-ok!}
