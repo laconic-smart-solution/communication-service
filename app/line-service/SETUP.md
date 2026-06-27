@@ -1,6 +1,6 @@
 # LINE Service — Setup Guide
 
-`line-service` wraps the [LINE Messaging API](https://developers.line.biz/en/docs/messaging-api/) for outbound push messages, channel connections, and inbound webhooks. It runs on port **8083** and is called internally by **normalization-service** — not directly by public clients.
+`line-service` runs on port **8083** and is reached via the gateway at `/comms/line/**`.
 
 ---
 
@@ -22,8 +22,6 @@ Optional: run the full stack via Docker Compose from the repo root (see [Full st
 Client / LINE servers
         ↓
 Spring Cloud Gateway (:8080)
-        ↓
-normalization-service (:8090)  ← GraphQL + webhook proxy
         ↓
 line-service (:8083)           ← this service
         ↓
@@ -53,7 +51,7 @@ cp app/line-service/.env.example app/line-service/.env
 | `LOG_LEVEL` | no | `info` | `debug`, `info`, `warn`, `error` |
 | `DATABASE_URL` | yes | — | Postgres connection string |
 | `DB_AUTO_MIGRATE` | no | `true` | Run GORM migrations on startup |
-| `GATEWAY_SECRET` | yes | — | Must match gateway / normalization (`X-Gateway-Secret`) |
+| `GATEWAY_SECRET` | yes | — | Must match gateway (`X-Gateway-Secret`) |
 | `LINE_CHANNEL_SECRET` | yes* | — | Channel secret for webhook signature verification |
 | `LINE_CHANNEL_ACCESS_TOKEN` | no** | — | Default token when channel record has none |
 
@@ -112,16 +110,13 @@ curl http://localhost:8083/api/v1/healthz
 # {"service":"line-service","status":"ok"}
 ```
 
-### 4. Run with normalization + gateway (recommended)
+### 4. Run with gateway (recommended)
 
 ```bash
 # terminal 1
 go run ./app/line-service/cmd/main.go
 
 # terminal 2
-go run ./app/normalization-service/cmd/main.go
-
-# terminal 3
 cd app/gateway && mvn spring-boot:run
 ```
 
@@ -141,16 +136,16 @@ docker compose up --build
 |---------|-----|
 | Gateway | http://localhost:8080 |
 | line-service (internal) | http://localhost:8083 |
-| Health via gateway | http://localhost:8080/comms/healthz |
+| Health via gateway | http://localhost:8080/comms/line/api/v1/healthz |
 
 ---
 
 ## API reference (internal REST)
 
-All business routes require header `X-Gateway-Secret` (injected by gateway/normalization).  
+All business routes require header `X-Gateway-Secret` (injected by gateway).  
 Webhooks and health checks are exempt.
 
-### Headers (from normalization / gateway)
+### Headers (from gateway)
 
 | Header | Description |
 |--------|-------------|
@@ -213,32 +208,27 @@ Errors return `"success": false` and `"error": "message"`.
 
 ---
 
-## GraphQL (via gateway)
+## Public API (via gateway)
 
-Clients should use normalization-service through the gateway:
+Clients call REST through the gateway with JWT:
 
 ```
-POST http://localhost:8080/comms/graphql
+POST http://localhost:8080/comms/line/api/v1/messages
 Authorization: Bearer <jwt>
 ```
 
-Example:
+Example send message:
 
-```graphql
-mutation {
-  sendMessage(input: {
-    platform: LINE
-    channelId: "<uuid>"
-    recipientId: "Uxxxxxxxx..."
-    text: "Hello!"
-  }) {
-    id
-    status
-  }
-}
+```bash
+curl -X POST http://localhost:8080/comms/line/api/v1/messages \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <jwt>" \
+  -d '{
+    "channel_id": "<uuid>",
+    "recipient_id": "Uxxxxxxxx...",
+    "text": "Hello!"
+  }'
 ```
-
-Playground (dev): http://localhost:8090/graphql when `PLAYGROUND_ENABLED=true`.
 
 ---
 
@@ -261,7 +251,7 @@ Migrations run automatically when `DB_AUTO_MIGRATE=true`.
 | `invalid webhook signature` | `LINE_CHANNEL_SECRET` wrong; body must not be modified by proxy |
 | `failed to send message` | Token expired or invalid; verify Channel access token |
 | `db connect` failed | Postgres running; `DATABASE_URL` correct |
-| Webhook not received | URL registered in LINE Console; gateway routes to normalization → line-service |
+| Webhook not received | URL registered in LINE Console; gateway routes to line-service |
 
 ---
 
@@ -269,5 +259,5 @@ Migrations run automatically when `DB_AUTO_MIGRATE=true`.
 
 - [Repository README](../../README.md)
 - [Architecture](../../docs/ARCHITECTURE.md)
-- [Normalization service](../normalization-service/.env.example)
+- [Gateway](../../docs/API_GATEWAY.md)
 - [Go coding standard](../../docs/GO_CODING_STANDARD.md)

@@ -1,10 +1,9 @@
 # Go Coding Standard — Communication Service
 
 > This document defines the conventions for the **communication-service** Go repository.
-> The repo hosts **one microservice per social platform** under `app/<platform>-service/`
-> plus **`app/normalization-service/`** for the unified GraphQL layer. Platform services wrap
-> a single vendor API; normalization fans out to them via REST. When in doubt, open an
-> existing service and copy the shape.
+> The repo hosts **one microservice per platform** under `app/<platform>-service/`.
+> **Spring Cloud Gateway** routes public traffic directly to each service. Platform services
+> wrap a single vendor API. When in doubt, open an existing service and copy the shape.
 
 **Stack:** Go 1.22 · Fiber v2 · GORM v2 + PostgreSQL · logrus · google/uuid ·
 go-playground/validator · golang-jwt/v5 · go-redis · godotenv.
@@ -23,11 +22,7 @@ service with an identical internal layout:
 communication-service/
 ├─ go.mod
 ├─ app/
-│  ├─ normalization-service/
-│  │  ├─ cmd/main.go
-│  │  ├─ internal/graphql/         # gqlgen schema + resolvers
-│  │  ├─ internal/client/         # REST → platform services (not vendor APIs)
-│  │  └─ …
+│  ├─ gateway/                     # Spring Cloud Gateway (Java)
 │  ├─ facebook-service/
 │  │  ├─ cmd/
 │  │  │  └─ main.go                 # composition root
@@ -51,7 +46,7 @@ communication-service/
 │  │  └─ …                          # same layout; own internal/client/
 │  └─ line-service/
 │     └─ …
-└─ pkg/                             # optional: shared across services (keep minimal)
+└─ pkg/                             # shared envelope + HTTP helpers (response, utils)
 ```
 
 **Rule:** dependencies point **inward and downward** only:
@@ -64,12 +59,8 @@ handler → service → repository → models
 `mapper`, `request`, `response`, `config` are leaf packages. A `repository` never imports a
 `service` or `client`. A `client` never imports `handler` or `service`.
 
-**Cross-service rule:** never import another service's `internal/` package. Share code only
-through the root `pkg/` (sparingly) or duplicate thin helpers.
-
-**Normalization-service rule:** resolvers call platform services over HTTP via
-`internal/client/` — never import platform `internal/` packages. Normalization does not call
-vendor APIs directly; that stays in each platform service's `internal/client/`.
+**Cross-service rule:** never import another service's `internal/` package. Share code through
+root [`pkg/response`](../pkg/response/) and [`pkg/utils`](../pkg/utils/).
 
 ### Module path
 
@@ -279,7 +270,7 @@ func (h *WebhookHandler) Handle(c *fiber.Ctx) error {
 
 ## 9. Response envelope & helpers
 
-Every response uses `response.APIResponse`, produced via `pkg/utils` helpers.
+Every response uses `pkg/response.APIResponse`, produced via `pkg/utils` helpers.
 
 ```go
 type APIResponse struct {
@@ -295,8 +286,8 @@ Helpers: `utils.OK`, `utils.Created`, `utils.BadRequest`, `utils.NotFound`,
 
 Pagination: `response.PagedResponse[T]` + `response.PageMeta`.
 
-Prefer identical envelope code in each service's `pkg/utils/`; extract to root `pkg/` only
-when three or more services need the same helper unchanged.
+Prefer identical envelope code in root `pkg/utils/`; service `internal/response/` holds only
+platform-specific DTOs (e.g. `ChannelResponse`, `StoreResponse`).
 
 ---
 
@@ -410,10 +401,9 @@ Each service's `app/<platform>-service/cmd/main.go` follows the same sequence:
 
 ## 18. Security defaults
 
-- Gateway (Spring Cloud Gateway) handles CORS, rate limiting, and JWT; routes **all** `/comms/**`
-  traffic to normalization-service only — see [API_GATEWAY.md](API_GATEWAY.md).
-- Normalization is the sole gateway upstream: GraphQL resolvers and webhook proxy forward to
-  platform services — see [NORMALIZATION_SERVICE.md](NORMALIZATION_SERVICE.md).
+- Gateway (Spring Cloud Gateway) handles CORS, JWT, and routes `/comms/{platform}/**` to
+  platform services — see [API_GATEWAY.md](API_GATEWAY.md).
+- Gateway injects `X-Gateway-Secret`; platform middleware validates it on business routes.
 - Platform services are internal; webhook signatures verified in platform `internal/client/`.
 - Tokens: `json:"-"` on models, never in response DTOs.
 - Scope all queries by `tenant_id`.

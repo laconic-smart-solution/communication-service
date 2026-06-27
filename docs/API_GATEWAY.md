@@ -1,14 +1,13 @@
 # API Gateway — Spring Cloud Gateway
 
-**Spring Cloud Gateway** (Spring Boot) is the edge layer: CORS, rate limiting, JWT, and
-routing. It has **one upstream** — `normalization-service`. It never calls platform services
-directly.
+**Spring Cloud Gateway** is the edge layer: CORS, JWT validation, and routing directly to
+platform Go services.
 
 ```
-Gateway  →  normalization-service  →  facebook / instagram / line
+Gateway  →  facebook / line / lazada services
 ```
 
-> The gateway lives in a **separate repository**.
+Location: [`app/gateway/`](../app/gateway/)
 
 ---
 
@@ -16,205 +15,107 @@ Gateway  →  normalization-service  →  facebook / instagram / line
 
 ```
                     ┌──────────────────────────────────────────┐
-  All traffic       │        Spring Cloud Gateway               │
-  (GraphQL,         │  CORS · rate limit · JWT · routing        │
-   webhooks)   ────▶└───────────────────┬──────────────────────┘
-                                          │
-                                          │  only connection
-                                          ▼
-                               normalization-service :8090
-                                          │
-                          ┌───────────────┼───────────────┐
-                          ▼               ▼               ▼
-                   facebook-svc   instagram-svc    line-svc
+  Clients / vendors │        Spring Cloud Gateway               │
+                    │  CORS · JWT · X-Gateway-Secret injection  │
+                    └───────────┬──────────────┬────────────────┘
+                                │              │
+                    ┌───────────▼──┐  ┌────────▼────────┐
+                    │ facebook-svc │  │ line / lazada   │
+                    └──────────────┘  └─────────────────┘
 ```
 
-### Gateway responsibilities (do)
+### Gateway responsibilities
 
 | Concern | Gateway |
 |---------|---------|
 | CORS | yes |
-| Rate limiting | yes |
-| JWT validation (GraphQL routes) | yes |
-| Request logging / tracing | yes |
-| Route **all** `/comms/**` → normalization-service | yes |
-| Inject `X-Tenant-ID`, `X-Actor-ID`, `X-Request-ID` | yes (on authenticated routes) |
-
-### Gateway responsibilities (do not)
-
-| Concern | Where |
-|---------|-------|
-| Route to facebook / instagram / line | **never** — normalization only |
-| GraphQL | normalization-service |
-| Webhook proxy / platform routing | normalization-service |
-| Webhook signature verification | platform service `internal/client/` |
-| Vendor API calls | platform service `internal/client/` |
+| JWT validation (business API routes) | yes |
+| Inject `X-Gateway-Secret` on all outbound requests | yes |
+| Inject `X-Tenant-ID`, `X-Actor-ID` from JWT | yes |
+| Route `/comms/{platform}/**` to platform services | yes |
+| Webhook signature verification | no — platform `internal/client/` |
+| Vendor API calls | no — platform services |
 
 ---
 
 ## Public URL layout
 
-Every public path hits normalization-service first:
+| Public path | Upstream | Auth |
+|-------------|----------|------|
+| `/comms/facebook/**` | `facebook-service:8081/**` | JWT on `/api/v1/**` except webhooks + healthz |
+| `/comms/line/**` | `line-service:8083/**` | same |
+| `/comms/lazada/**` | `lazada-service:8084/**` | same |
+| `GET /comms/**/api/v1/healthz` | platform service | public |
+| `POST/GET /comms/**/api/v1/webhooks` | platform service | public |
 
-| Public path | Gateway forwards to | Auth |
-|-------------|---------------------|------|
-| `POST /comms/graphql` | `normalization-service/graphql` | JWT |
-| `GET /comms/graphql` | `normalization-service/graphql` | JWT (playground, dev) |
-| `POST /comms/facebook/api/v1/webhooks` | `normalization-service` (proxy) | no |
-| `GET /comms/facebook/api/v1/webhooks` | `normalization-service` (proxy) | no |
-| `POST /comms/instagram/api/v1/webhooks` | `normalization-service` (proxy) | no |
-| `POST /comms/line/api/v1/webhooks` | `normalization-service` (proxy) | no |
-| `GET /comms/healthz` | `normalization-service/healthz` | no |
+Path rewrite example:
 
 ```
-# Client (Laconic app)
-POST https://api.example.com/comms/graphql
-
-# Vendor webhook (LINE) — still enters via gateway, proxied through normalization
-POST https://api.example.com/comms/line/api/v1/webhooks
-X-Line-Signature: ...
+GET /comms/lazada/api/v1/stores  →  lazada-service/api/v1/stores
 ```
 
 ---
 
 ## Authentication
 
-### Routes that require JWT
+### JWT required
 
-- `POST /comms/graphql`
-- `GET /comms/graphql` (if playground enabled)
+All `/comms/**/api/v1/**` routes except webhooks and health checks.
 
-Gateway validates JWT, then forwards to normalization with:
+Gateway forwards identity headers after JWT validation:
 
 | Header | Description |
 |--------|-------------|
 | `X-Tenant-ID` | Tenant UUID |
-| `X-Actor-ID` | User / service account UUID |
-| `X-Request-ID` | Correlation ID |
+| `X-Actor-ID` | User UUID |
+| `X-Gateway-Secret` | Shared secret (always injected) |
 
-### Public routes (no JWT)
+### Public routes
 
 | Path | Reason |
 |------|--------|
-| `POST /comms/*/api/v1/webhooks` | Vendor callbacks |
-| `GET /comms/facebook/api/v1/webhooks` | Meta `hub.challenge` |
-| `GET /comms/healthz` | Liveness |
-
-Normalization decides how to proxy webhooks; gateway only forwards.
+| `POST/GET /comms/**/api/v1/webhooks` | Vendor callbacks |
+| `GET /comms/**/api/v1/healthz` | Liveness |
 
 ---
 
-## Webhook forwarding rules (gateway → normalization)
+## Configuration
 
-1. **Forward raw body** — do not parse or re-serialize JSON.
-2. **Preserve vendor headers** — Meta: `X-Hub-Signature-256`; LINE: `X-Line-Signature`.
-3. **No auth filter** on webhook paths.
-4. **Do not route webhooks to platform services** — always send to normalization-service.
-5. Short upstream timeout (e.g. 15s).
-
-Normalization then proxies to the correct platform service unchanged. See
-[NORMALIZATION_SERVICE.md](NORMALIZATION_SERVICE.md#webhook-proxy).
-
----
-
-## Spring Cloud Gateway configuration
-
-### Dependencies (`pom.xml`)
-
-```xml
-<dependency>
-    <groupId>org.springframework.cloud</groupId>
-    <artifactId>spring-cloud-starter-gateway</artifactId>
-</dependency>
-<dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
-</dependency>
-```
-
-### Routes (`application.yml`)
-
-The gateway needs **two route groups** — both point to normalization-service:
+[`application.yml`](../app/gateway/src/main/resources/application.yml):
 
 ```yaml
-spring:
-  application:
-    name: communication-api-gateway
-  cloud:
-    gateway:
-      routes:
-        # ── GraphQL (authenticated) ───────────────────────────
-        - id: comms-graphql
-          uri: ${NORMALIZATION_SERVICE_URI:http://normalization-service:8090}
-          predicates:
-            - Path=/comms/graphql
-          filters:
-            - RewritePath=/comms/graphql, /graphql
-
-        # ── Webhooks + health (public) ────────────────────────
-        - id: comms-proxy
-          uri: ${NORMALIZATION_SERVICE_URI:http://normalization-service:8090}
-          predicates:
-            - Path=/comms/**
-          filters:
-            - RewritePath=/comms/(?<segment>.*), /proxy/${segment}
-          metadata:
-            public: true
-
-      default-filters:
-        - AddRequestHeader=X-Request-ID, #{T(java.util.UUID).randomUUID()}
-        - name: RequestRateLimiter
-          args:
-            redis-rate-limiter.replenishRate: 100
-            redis-rate-limiter.burstCapacity: 200
-
-server:
-  port: 8080
+spring.cloud.gateway.routes:
+  - id: comms-facebook
+    uri: ${FACEBOOK_SERVICE_URI:http://localhost:8081}
+    predicates: [Path=/comms/facebook/**]
+    filters:
+      - RewritePath=/comms/facebook/(?<segment>.*), /${segment}
+  # line, lazada — same pattern
 ```
 
-> `/comms/graphql` is listed first so it matches before the catch-all `/comms/**` proxy route.
-> Normalization exposes `/proxy/{platform}/api/v1/webhooks` (or similar) to forward to platform
-> services — see [NORMALIZATION_SERVICE.md](NORMALIZATION_SERVICE.md).
-
-There are **no** `uri: http://facebook-service:8081` (or similar) entries in the gateway.
-
-### JWT filter (conceptual)
-
-```java
-if (route.getMetadata().getOrDefault("public", false).equals(true)) {
-    return chain.filter(exchange);
-}
-// validate JWT → set X-Tenant-ID, X-Actor-ID
-```
-
-### CORS (gateway only)
-
-```yaml
-spring:
-  cloud:
-    gateway:
-      globalcors:
-        cors-configurations:
-          '[/**]':
-            allowedOrigins: "${CORS_ALLOWED_ORIGINS}"
-            allowedMethods: GET,POST,OPTIONS
-            allowedHeaders: "*"
-            allowCredentials: true
-```
-
----
-
-## Environment variables
+### Environment variables
 
 | Variable | Description |
 |----------|-------------|
-| `SERVER_PORT` | Gateway port (default `8080`) |
-| `SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI` | JWT issuer |
-| `NORMALIZATION_SERVICE_URI` | **Only** upstream — `http://normalization-service:8090` |
-| `CORS_ALLOWED_ORIGINS` | Browser client origins |
-| `REDIS_URL` | Rate limiter backend (optional) |
+| `GATEWAY_PORT` | Gateway port (default `8080`) |
+| `GATEWAY_SECRET` | Injected as `X-Gateway-Secret` |
+| `GATEWAY_JWT_HMAC_SECRET` | JWT HMAC validation |
+| `FACEBOOK_SERVICE_URI` | Upstream facebook-service |
+| `LINE_SERVICE_URI` | Upstream line-service |
+| `LAZADA_SERVICE_URI` | Upstream lazada-service |
+| `GATEWAY_CORS_ALLOWED_ORIGINS` | Browser origins |
 
-No `FACEBOOK_SERVICE_URI`, `LINE_SERVICE_URI`, etc. on the gateway — normalization holds those.
+---
+
+## Response format
+
+Platform services return a shared JSON envelope via root `pkg/response`:
+
+```json
+{ "success": true, "data": { ... } }
+```
+
+Webhooks return plain `200 OK` (vendor requirement).
 
 ---
 
@@ -223,25 +124,21 @@ No `FACEBOOK_SERVICE_URI`, `LINE_SERVICE_URI`, etc. on the gateway — normaliza
 | Check | URL |
 |-------|-----|
 | Gateway | `GET /actuator/health` |
-| Stack (via gateway) | `GET /comms/healthz` |
-
-For Kubernetes, you may additionally probe platform services on the internal network
-(`facebook-service:8081/api/v1/healthz`) — that is not a gateway route.
+| Line (via gateway) | `GET /comms/line/api/v1/healthz` |
+| Lazada (via gateway) | `GET /comms/lazada/api/v1/healthz` |
 
 ---
 
 ## Adding a new platform service
 
 1. Add `app/<platform>-service/`.
-2. Add REST client + resolvers in `normalization-service`.
-3. Add webhook proxy route in `normalization-service` (not in the gateway).
-4. Register vendor webhook URL: `https://api.example.com/comms/<platform>/api/v1/webhooks`.
-5. Gateway config unchanged — still only points to normalization.
+2. Add a route block in `application.yml`.
+3. Add `/<PLATFORM>_SERVICE_URI` env var to gateway and docker-compose.
+4. Register vendor webhooks at `https://api.example.com/comms/<platform>/api/v1/webhooks`.
 
 ---
 
 ## Related docs
 
-- [NORMALIZATION_SERVICE.md](NORMALIZATION_SERVICE.md) — GraphQL + webhook proxy
-- [ARCHITECTURE.md](ARCHITECTURE.md) — system context
-- [GO_CODING_STANDARD.md](GO_CODING_STANDARD.md) — Go conventions
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+- [GO_CODING_STANDARD.md](GO_CODING_STANDARD.md)

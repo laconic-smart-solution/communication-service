@@ -15,29 +15,26 @@ spring:
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials Access-Control-Allow-Methods Access-Control-Allow-Headers, RETAIN_FIRST
       routes:
-        - id: comms-graphql
-          uri: ${NORMALIZATION_SERVICE_URI:http://localhost:8090}
+        - id: comms-facebook
+          uri: ${FACEBOOK_SERVICE_URI:http://localhost:8081}
           predicates:
-            - Path=/comms/graphql
+            - Path=/comms/facebook/**
           filters:
-            - RewritePath=/comms/graphql, /graphql
+            - RewritePath=/comms/facebook/(?<segment>.*), /${segment}
 
-        - id: comms-healthz
-          uri: ${NORMALIZATION_SERVICE_URI:http://localhost:8090}
+        - id: comms-line
+          uri: ${LINE_SERVICE_URI:http://localhost:8083}
           predicates:
-            - Path=/comms/healthz
+            - Path=/comms/line/**
           filters:
-            - RewritePath=/comms/healthz, /healthz
+            - RewritePath=/comms/line/(?<segment>.*), /${segment}
 
-        - id: comms-proxy
-          uri: ${NORMALIZATION_SERVICE_URI:http://localhost:8090}
+        - id: comms-lazada
+          uri: ${LAZADA_SERVICE_URI:http://localhost:8084}
           predicates:
-            - Path=/comms/**
+            - Path=/comms/lazada/**
           filters:
-            - name: RewritePath
-              args:
-                regexp: /comms/(?<segment>.*)
-                replacement: /proxy/${segment}
+            - RewritePath=/comms/lazada/(?<segment>.*), /${segment}
 
 management:
   endpoints:

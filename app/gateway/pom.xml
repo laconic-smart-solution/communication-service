@@ -15,7 +15,7 @@
   <artifactId>communication-gateway</artifactId>
   <version>0.1.0-SNAPSHOT</version>
   <name>communication-gateway</name>
-  <description>Edge gateway for communication-service (JWT, CORS, routing to normalization).</description>
+  <description>Edge gateway for communication-service (JWT, CORS, direct platform routing).</description>
 
   <properties>
     <java.version>21</java.version>

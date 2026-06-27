@@ -14,12 +14,13 @@ import (
 	"github.com/laconic-smart-solution/communication-service/app/facebook-service/internal/repository"
 	"github.com/laconic-smart-solution/communication-service/app/facebook-service/internal/request"
 	"github.com/laconic-smart-solution/communication-service/app/facebook-service/internal/response"
+	pkgresponse "github.com/laconic-smart-solution/communication-service/pkg/response"
 )
 
 type PostService interface {
 	Create(ctx context.Context, tenantID uuid.UUID, req request.CreatePostRequest, actor *uuid.UUID) (*response.PostResponse, error)
 	GetByID(ctx context.Context, tenantID, postID uuid.UUID) (*response.PostResponse, error)
-	List(ctx context.Context, tenantID uuid.UUID, req request.ListPostsRequest) (*response.PagedResponse[response.PostResponse], error)
+	List(ctx context.Context, tenantID uuid.UUID, req request.ListPostsRequest) (*pkgresponse.PagedResponse[response.PostResponse], error)
 	Update(ctx context.Context, tenantID, postID uuid.UUID, req request.UpdatePostRequest, actor *uuid.UUID) (*response.PostResponse, error)
 	Delete(ctx context.Context, tenantID, postID uuid.UUID, actor *uuid.UUID) error
 }
@@ -96,7 +97,7 @@ func (s *postServiceImpl) GetByID(ctx context.Context, tenantID, postID uuid.UUI
 	return &res, nil
 }
 
-func (s *postServiceImpl) List(ctx context.Context, tenantID uuid.UUID, req request.ListPostsRequest) (*response.PagedResponse[response.PostResponse], error) {
+func (s *postServiceImpl) List(ctx context.Context, tenantID uuid.UUID, req request.ListPostsRequest) (*pkgresponse.PagedResponse[response.PostResponse], error) {
 	page, limit := req.Page, req.Limit
 	if page < 1 {
 		page = 1
@@ -121,9 +122,9 @@ func (s *postServiceImpl) List(ctx context.Context, tenantID uuid.UUID, req requ
 	if int(total)%limit != 0 {
 		totalPages++
 	}
-	return &response.PagedResponse[response.PostResponse]{
+	return &pkgresponse.PagedResponse[response.PostResponse]{
 		Items: mapper.ToPostResponses(items),
-		Meta: response.PageMeta{Page: page, Limit: limit, Total: total, TotalPages: totalPages},
+		Meta: pkgresponse.PageMeta{Page: page, Limit: limit, Total: total, TotalPages: totalPages},
 	}, nil
 }
 

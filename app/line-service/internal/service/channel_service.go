@@ -13,11 +13,12 @@ import (
 	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/repository"
 	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/request"
 	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/response"
+	pkgresponse "github.com/laconic-smart-solution/communication-service/pkg/response"
 )
 
 type ChannelService interface {
 	Connect(ctx context.Context, tenantID uuid.UUID, req request.ConnectChannelRequest, actor *uuid.UUID) (*response.ChannelResponse, error)
-	List(ctx context.Context, tenantID uuid.UUID, req request.ListChannelsRequest) (*response.PagedResponse[response.ChannelResponse], error)
+	List(ctx context.Context, tenantID uuid.UUID, req request.ListChannelsRequest) (*pkgresponse.PagedResponse[response.ChannelResponse], error)
 	Revoke(ctx context.Context, tenantID, channelID uuid.UUID, actor *uuid.UUID) error
 }
 
@@ -51,7 +52,7 @@ func (s *channelServiceImpl) Connect(ctx context.Context, tenantID uuid.UUID, re
 	return &res, nil
 }
 
-func (s *channelServiceImpl) List(ctx context.Context, tenantID uuid.UUID, req request.ListChannelsRequest) (*response.PagedResponse[response.ChannelResponse], error) {
+func (s *channelServiceImpl) List(ctx context.Context, tenantID uuid.UUID, req request.ListChannelsRequest) (*pkgresponse.PagedResponse[response.ChannelResponse], error) {
 	page, limit := req.Page, req.Limit
 	if page < 1 {
 		page = 1
@@ -71,9 +72,9 @@ func (s *channelServiceImpl) List(ctx context.Context, tenantID uuid.UUID, req r
 		totalPages++
 	}
 
-	return &response.PagedResponse[response.ChannelResponse]{
+	return &pkgresponse.PagedResponse[response.ChannelResponse]{
 		Items: mapper.ToChannelResponses(items),
-		Meta: response.PageMeta{
+		Meta: pkgresponse.PageMeta{
 			Page:       page,
 			Limit:      limit,
 			Total:      total,

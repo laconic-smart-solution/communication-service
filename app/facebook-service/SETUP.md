@@ -1,6 +1,6 @@
 # Facebook Service — Setup Guide
 
-`facebook-service` wraps the [Meta Graph API](https://developers.facebook.com/docs/graph-api/) for Facebook Page **post CRUD**, channel (Page) connections, and webhooks. It runs on port **8081** and is called internally by **normalization-service**.
+`facebook-service` runs on port **8081** and is reached via the gateway at `/comms/facebook/**`.
 
 ---
 
@@ -22,8 +22,6 @@ Optional: Docker Compose from the repo root for the full stack.
 Client / Meta servers
         ↓
 Spring Cloud Gateway (:8080)
-        ↓
-normalization-service (:8090)  ← GraphQL + webhook proxy
         ↓
 facebook-service (:8081)         ← this service
         ↓
@@ -51,7 +49,7 @@ cp app/facebook-service/.env.example app/facebook-service/.env
 | `LOG_LEVEL` | no | `info` | Log level |
 | `DATABASE_URL` | yes | — | Postgres connection string |
 | `DB_AUTO_MIGRATE` | no | `true` | Run GORM migrations on startup |
-| `GATEWAY_SECRET` | yes | — | Must match gateway / normalization |
+| `GATEWAY_SECRET` | yes | — | Must match gateway (`X-Gateway-Secret`) |
 | `FACEBOOK_APP_ID` | no | — | Meta app ID (reference / future OAuth) |
 | `FACEBOOK_APP_SECRET` | yes* | — | App secret for webhook `X-Hub-Signature-256` |
 | `FACEBOOK_VERIFY_TOKEN` | yes* | — | Custom string for webhook subscription verify |
@@ -125,8 +123,7 @@ curl http://localhost:8081/api/v1/healthz
 
 ```bash
 go run ./app/facebook-service/cmd/main.go   # terminal 1
-go run ./app/normalization-service/cmd/main.go  # terminal 2
-cd app/gateway && mvn spring-boot:run       # terminal 3
+cd app/gateway && mvn spring-boot:run       # terminal 2
 ```
 
 ---
@@ -143,7 +140,7 @@ docker compose up --build
 |---------|-----|
 | Gateway | http://localhost:8080 |
 | facebook-service (internal) | http://localhost:8081 |
-| GraphQL playground | http://localhost:8090/graphql |
+| Health via gateway | http://localhost:8080/comms/facebook/api/v1/healthz |
 
 ---
 
@@ -236,34 +233,23 @@ Returns the `hub.challenge` string on success.
 
 ---
 
-## GraphQL (via gateway)
+## Public API (via gateway)
 
 ```
-POST http://localhost:8080/comms/graphql
+POST http://localhost:8080/comms/facebook/api/v1/posts
 Authorization: Bearer <jwt>
 ```
 
-```graphql
-mutation {
-  createPost(input: {
-    platform: FACEBOOK
-    channelId: "<page-channel-uuid>"
-    message: "Published via GraphQL"
-  }) {
-    id
-    status
-    externalId
-  }
-}
+Example create post:
 
-query {
-  posts(platform: FACEBOOK, page: 1, limit: 10) {
-    id
-    message
-    status
-    externalId
-  }
-}
+```bash
+curl -X POST http://localhost:8080/comms/facebook/api/v1/posts \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <jwt>" \
+  -d '{
+    "channel_id": "<page-channel-uuid>",
+    "message": "Published via gateway"
+  }'
 ```
 
 ---
@@ -296,6 +282,6 @@ Post statuses: `draft` → `published` | `failed` | `deleted`.
 
 - [Repository README](../../README.md)
 - [Architecture](../../docs/ARCHITECTURE.md)
-- [Normalization service](../normalization-service/.env.example)
+- [Gateway](../../docs/API_GATEWAY.md)
 - [Meta Graph API](https://developers.facebook.com/docs/graph-api/)
 - [Go coding standard](../../docs/GO_CODING_STANDARD.md)

@@ -6,7 +6,7 @@ import (
 
 	"github.com/laconic-smart-solution/communication-service/app/facebook-service/internal/request"
 	"github.com/laconic-smart-solution/communication-service/app/facebook-service/internal/service"
-	"github.com/laconic-smart-solution/communication-service/app/facebook-service/pkg/utils"
+	"github.com/laconic-smart-solution/communication-service/pkg/utils"
 )
 
 type ChannelHandler struct {

@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+
+	"github.com/laconic-smart-solution/communication-service/pkg/response"
 )
 
 func RequireGatewaySecret(sharedSecret string) fiber.Handler {
@@ -14,11 +16,17 @@ func RequireGatewaySecret(sharedSecret string) fiber.Handler {
 			return c.Next()
 		}
 		if sharedSecret == "" {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"success": false, "error": "gateway secret is not configured"})
+			return c.Status(fiber.StatusInternalServerError).JSON(response.APIResponse{
+				Success: false,
+				Error:   "gateway secret is not configured",
+			})
 		}
 		got := c.Get("X-Gateway-Secret")
 		if subtle.ConstantTimeCompare([]byte(got), []byte(sharedSecret)) != 1 {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"success": false, "error": "forbidden"})
+			return c.Status(fiber.StatusForbidden).JSON(response.APIResponse{
+				Success: false,
+				Error:   "forbidden",
+			})
 		}
 		return c.Next()
 	}

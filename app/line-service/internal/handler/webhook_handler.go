@@ -4,7 +4,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/service"
-	"github.com/laconic-smart-solution/communication-service/app/line-service/pkg/utils"
+	"github.com/laconic-smart-solution/communication-service/pkg/utils"
 )
 
 type WebhookHandler struct {
