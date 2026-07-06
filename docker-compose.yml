@@ -70,9 +70,53 @@ services:
       GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
       LAZADA_APP_KEY: ${LAZADA_APP_KEY:-}
       LAZADA_APP_SECRET: ${LAZADA_APP_SECRET:-}
-      LAZADA_REDIRECT_URI: ${LAZADA_REDIRECT_URI:-http://localhost:5173/lazada/callback}
+      LAZADA_REDIRECT_URI: ${LAZADA_REDIRECT_URI:-http://localhost:5173/stores/lazada/callback}
     ports:
       - "8084:8084"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  shopee-service:
+    build:
+      context: .
+      dockerfile: app/shopee-service/Dockerfile
+    container_name: comms-shopee-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      SHOPEE_SERVICE_PORT: "8085"
+      DATABASE_URL: postgres://${POSTGRES_USER:-comms}:${POSTGRES_PASSWORD:-comms}@postgres:5432/${POSTGRES_DB:-communication}?sslmode=disable
+      DB_AUTO_MIGRATE: "true"
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
+      SHOPEE_PARTNER_ID: ${SHOPEE_PARTNER_ID:-}
+      SHOPEE_PARTNER_KEY: ${SHOPEE_PARTNER_KEY:-}
+      SHOPEE_REDIRECT_URI: ${SHOPEE_REDIRECT_URI:-http://localhost:5173/stores/shopee/callback}
+    ports:
+      - "8085:8085"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  tiktok-service:
+    build:
+      context: .
+      dockerfile: app/tiktok-service/Dockerfile
+    container_name: comms-tiktok-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TIKTOK_SERVICE_PORT: "8086"
+      DATABASE_URL: postgres://${POSTGRES_USER:-comms}:${POSTGRES_PASSWORD:-comms}@postgres:5432/${POSTGRES_DB:-communication}?sslmode=disable
+      DB_AUTO_MIGRATE: "true"
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
+      TIKTOK_APP_KEY: ${TIKTOK_APP_KEY:-}
+      TIKTOK_APP_SECRET: ${TIKTOK_APP_SECRET:-}
+      TIKTOK_REDIRECT_URI: ${TIKTOK_REDIRECT_URI:-http://localhost:5173/stores/tiktok/callback}
+    ports:
+      - "8086:8086"
     depends_on:
       postgres:
         condition: service_healthy
@@ -92,6 +136,8 @@ services:
       FACEBOOK_SERVICE_URI: http://facebook-service:8081
       LINE_SERVICE_URI: http://line-service:8083
       LAZADA_SERVICE_URI: http://lazada-service:8084
+      SHOPEE_SERVICE_URI: http://shopee-service:8085
+      TIKTOK_SERVICE_URI: http://tiktok-service:8086
       GATEWAY_CORS_ALLOWED_ORIGINS: ${GATEWAY_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     ports:
       - "8080:8080"
@@ -101,6 +147,10 @@ services:
       line-service:
         condition: service_started
       lazada-service:
+        condition: service_started
+      shopee-service:
+        condition: service_started
+      tiktok-service:
         condition: service_started
 
 volumes:

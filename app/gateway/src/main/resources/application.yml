@@ -36,6 +36,20 @@ spring:
           filters:
             - RewritePath=/comms/lazada/(?<segment>.*), /${segment}
 
+        - id: comms-shopee
+          uri: ${SHOPEE_SERVICE_URI:http://localhost:8085}
+          predicates:
+            - Path=/comms/shopee/**
+          filters:
+            - RewritePath=/comms/shopee/(?<segment>.*), /${segment}
+
+        - id: comms-tiktok
+          uri: ${TIKTOK_SERVICE_URI:http://localhost:8086}
+          predicates:
+            - Path=/comms/tiktok/**
+          filters:
+            - RewritePath=/comms/tiktok/(?<segment>.*), /${segment}
+
 management:
   endpoints:
     web:
