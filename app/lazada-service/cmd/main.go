@@ -17,12 +17,10 @@ import (
 
 	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/client"
 	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/config"
-	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/database"
 	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/handler"
-	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/middleware"
-	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/repository"
 	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/routes"
 	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/service"
+	pkgmiddleware "github.com/laconic-smart-solution/communication-service/pkg/middleware"
 )
 
 func main() {
@@ -39,17 +37,13 @@ func main() {
 		log.Fatal("LAZADA_REDIRECT_URI is required")
 	}
 
-	db, err := database.Connect(cfg, log)
-	if err != nil {
-		log.WithError(err).Fatal("db connect")
-	}
-
 	lazadaClient := client.NewLazadaClient(cfg, 15)
-	storeRepo := repository.NewStoreRepository(db)
-	storeSvc := service.NewStoreService(log, storeRepo, lazadaClient)
+	storeSvc := service.NewStoreService(log, lazadaClient)
+	orderSvc := service.NewOrderService(log, lazadaClient)
 
 	handlers := routes.Handlers{
 		Store: handler.NewStoreHandler(storeSvc),
+		Order: handler.NewOrderHandler(orderSvc),
 	}
 
 	app := fiber.New(fiber.Config{
@@ -69,7 +63,7 @@ func main() {
 			fiber.MethodPatch, fiber.MethodDelete, fiber.MethodOptions,
 		}, ","),
 	}))
-	app.Use(middleware.RequireGatewaySecret(cfg.GatewaySharedSecret))
+	app.Use(pkgmiddleware.RequireGatewaySecret(cfg.GatewaySharedSecret))
 	routes.Register(app, handlers)
 
 	addr := ":" + cfg.Port

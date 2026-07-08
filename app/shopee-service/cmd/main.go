@@ -17,12 +17,10 @@ import (
 
 	"github.com/laconic-smart-solution/communication-service/app/shopee-service/internal/client"
 	"github.com/laconic-smart-solution/communication-service/app/shopee-service/internal/config"
-	"github.com/laconic-smart-solution/communication-service/app/shopee-service/internal/database"
 	"github.com/laconic-smart-solution/communication-service/app/shopee-service/internal/handler"
-	pkgmiddleware "github.com/laconic-smart-solution/communication-service/pkg/middleware"
-	"github.com/laconic-smart-solution/communication-service/app/shopee-service/internal/repository"
 	"github.com/laconic-smart-solution/communication-service/app/shopee-service/internal/routes"
 	"github.com/laconic-smart-solution/communication-service/app/shopee-service/internal/service"
+	pkgmiddleware "github.com/laconic-smart-solution/communication-service/pkg/middleware"
 )
 
 func main() {
@@ -39,15 +37,9 @@ func main() {
 		log.Fatal("SHOPEE_REDIRECT_URI is required")
 	}
 
-	db, err := database.Connect(cfg, log)
-	if err != nil {
-		log.WithError(err).Fatal("db connect")
-	}
-
 	shopeeClient := client.NewShopeeClient(cfg, 15)
-	storeRepo := repository.NewStoreRepository(db)
-	storeSvc := service.NewStoreService(log, storeRepo, shopeeClient)
-	orderSvc := service.NewOrderService(log, storeRepo, shopeeClient)
+	storeSvc := service.NewStoreService(log, shopeeClient)
+	orderSvc := service.NewOrderService(log)
 
 	handlers := routes.Handlers{
 		Store: handler.NewStoreHandler(storeSvc),

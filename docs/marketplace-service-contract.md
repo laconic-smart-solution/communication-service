@@ -2,6 +2,8 @@
 
 Every marketplace microservice in `communication-service` (Lazada, Shopee, TikTok Shop, etc.) exposes the same REST contract so `laco-invoice` can integrate via a uniform BFF layer.
 
+Marketplace services are **stateless** — they proxy vendor OAuth and APIs only. Connection metadata and OAuth tokens are persisted in **laco-invoice** (`store_marketplace_connections`).
+
 ## Gateway routing
 
 | Public path | Internal service |
@@ -18,8 +20,8 @@ Gateway rewrites `/comms/{platform}/{segment}` → `/{segment}`.
 |--------|----------|-------------|
 | `Authorization: Bearer <jwt>` | At gateway | End-user JWT |
 | `X-Gateway-Secret` | Yes (service) | Service-to-service secret |
-| `X-Tenant-ID` | Mutations + list | Per-store tenant UUID from laco-invoice |
-| `X-Actor-ID` | Mutations | Per-user actor UUID |
+| `X-Tenant-ID` | Connect / orders | Per-store tenant UUID from laco-invoice |
+| `X-Actor-ID` | Connect / refresh | Per-user actor UUID |
 
 ## Standard store connection API
 
@@ -29,10 +31,10 @@ Base path: `/api/v1/stores`
 |--------|------|--------|-------|-------------|
 | GET | `/healthz` | No | No | Health check |
 | GET | `/authorize-url?state=` | No | No | Build vendor OAuth URL |
-| POST | `/connect` | Yes | Yes | Exchange OAuth `code` |
-| GET | `/?page=&limit=` | Yes | No | List tenant connections |
-| POST | `/{id}/refresh` | Yes | Yes | Refresh tokens |
-| DELETE | `/{id}` | Yes | Yes | Revoke connection |
+| POST | `/connect` | Yes | Yes | Exchange OAuth `code`; returns tokens |
+| POST | `/refresh` | Yes | Yes | Refresh tokens from `refresh_token` body |
+
+There is **no** list or revoke endpoint in marketplace services — laco-invoice owns connection lifecycle in its database.
 
 ## Response envelope
 
@@ -44,40 +46,42 @@ Base path: `/api/v1/stores`
 }
 ```
 
-Paged list `data`:
+## Connect / refresh response (token payload)
 
-```json
-{
-  "items": [ ],
-  "meta": { "page": 1, "limit": 20, "total": 0, "total_pages": 0 }
-}
-```
-
-## Store object (normalized)
+Returned by `POST /connect` and `POST /refresh`. Caller (laco-invoice) persists tokens locally.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | UUID | External connection ID |
-| `tenant_id` | UUID | laco-invoice store scope |
 | `seller_id` | string | Marketplace seller/shop ID |
 | `display_name` | string | Human-readable name |
 | `country` | string | Region/country code |
 | `account` | string | Optional account label |
 | `short_code` | string | Optional short code |
+| `access_token` | string | OAuth access token |
+| `refresh_token` | string | OAuth refresh token |
 | `token_expires_at` | ISO8601 | Access token expiry |
 | `refresh_expires_at` | ISO8601 | Refresh token expiry |
-| `created_at` | ISO8601 | Connection created |
-
-Tokens are stored in the marketplace service database only — never returned in API responses.
 
 ## Connect request
 
 ```json
 {
   "code": "oauth-authorization-code",
-  "display_name": "optional label"
+  "display_name": "optional label",
+  "shop_id": "required for Shopee when not in token response"
 }
 ```
+
+## Refresh request
+
+```json
+{
+  "refresh_token": "oauth-refresh-token",
+  "shop_id": "required for Shopee"
+}
+```
+
+Lazada and TikTok only require `refresh_token`.
 
 ## OAuth state (laco-invoice)
 
@@ -89,19 +93,21 @@ Base64url JSON passed to `authorize-url`:
 
 Legacy Lazada states with `{ "storeId": 123 }` only remain supported during migration.
 
-## Orders API (Phase 3)
+## Orders API
 
 Base path: `/api/v1/orders`
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/?store_id=&updated_from=` | Fetch orders for a connected store |
+| GET | `/?access_token=&seller_id=&updated_from=` | Fetch orders using caller-supplied access token |
+
+laco-invoice reads `access_token` from `store_marketplace_connections` and passes it to the marketplace service.
 
 ## Adding a new marketplace
 
-1. Copy `app/lazada-service/` layout to `app/{platform}-service/`.
+1. Copy `app/lazada-service/` layout to `app/{platform}-service/` (stateless, no database).
 2. Implement vendor OAuth client in `internal/client/`.
-3. Add gateway route and docker-compose service.
+3. Add gateway route and docker-compose service (no `DATABASE_URL`).
 4. Add laco-invoice `integration/{platform}/` client + `features/store/{platform}/` BFF.
 5. Register marketplace in client `SUPPORTED_MARKETPLACES` config.
 6. Implement `MarketplaceOrderAdapter` for order sync.

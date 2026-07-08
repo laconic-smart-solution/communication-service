@@ -2,7 +2,6 @@ package handler
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 
 	"github.com/laconic-smart-solution/communication-service/app/tiktok-service/internal/request"
 	"github.com/laconic-smart-solution/communication-service/app/tiktok-service/internal/service"
@@ -18,8 +17,7 @@ func NewOrderHandler(svc service.OrderService) *OrderHandler {
 }
 
 func (h *OrderHandler) List(c *fiber.Ctx) error {
-	tenantID, err := utils.RequireTenantID(c)
-	if err != nil {
+	if _, err := utils.RequireTenantID(c); err != nil {
 		return utils.BadRequest(c, err)
 	}
 
@@ -31,12 +29,7 @@ func (h *OrderHandler) List(c *fiber.Ctx) error {
 		return utils.BadRequest(c, err)
 	}
 
-	storeID, err := uuid.Parse(req.StoreID)
-	if err != nil {
-		return utils.BadRequest(c, err)
-	}
-
-	items, err := h.svc.List(c.Context(), tenantID, storeID, req.UpdatedFrom)
+	items, err := h.svc.List(c.Context(), req.AccessToken, req.SellerID, req.UpdatedFrom)
 	if err != nil {
 		return utils.BadRequest(c, err)
 	}

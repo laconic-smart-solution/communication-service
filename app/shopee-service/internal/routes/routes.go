@@ -22,9 +22,7 @@ func Register(app *fiber.App, h Handlers) {
 		stores := api.Group("/stores")
 		stores.Get("/authorize-url", h.Store.AuthorizeURL)
 		stores.Post("/connect", h.Store.Connect)
-		stores.Get("/", h.Store.List)
-		stores.Delete("/:id", h.Store.Revoke)
-		stores.Post("/:id/refresh", h.Store.Refresh)
+		stores.Post("/refresh", h.Store.Refresh)
 	}
 
 	if h.Order != nil {

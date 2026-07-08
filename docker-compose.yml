@@ -65,17 +65,12 @@ services:
       - .env
     environment:
       LAZADA_SERVICE_PORT: "8084"
-      DATABASE_URL: postgres://${POSTGRES_USER:-comms}:${POSTGRES_PASSWORD:-comms}@postgres:5432/${POSTGRES_DB:-communication}?sslmode=disable
-      DB_AUTO_MIGRATE: "true"
       GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
       LAZADA_APP_KEY: ${LAZADA_APP_KEY:-}
       LAZADA_APP_SECRET: ${LAZADA_APP_SECRET:-}
-      LAZADA_REDIRECT_URI: ${LAZADA_REDIRECT_URI:-http://localhost:5173/stores/lazada/callback}
+      LAZADA_REDIRECT_URI: ${LAZADA_REDIRECT_URI:-https://ranked-savanna-baggage.ngrok-free.dev/stores/lazada/callback}
     ports:
       - "8084:8084"
-    depends_on:
-      postgres:
-        condition: service_healthy
 
   shopee-service:
     build:
@@ -87,17 +82,12 @@ services:
       - .env
     environment:
       SHOPEE_SERVICE_PORT: "8085"
-      DATABASE_URL: postgres://${POSTGRES_USER:-comms}:${POSTGRES_PASSWORD:-comms}@postgres:5432/${POSTGRES_DB:-communication}?sslmode=disable
-      DB_AUTO_MIGRATE: "true"
       GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
       SHOPEE_PARTNER_ID: ${SHOPEE_PARTNER_ID:-}
       SHOPEE_PARTNER_KEY: ${SHOPEE_PARTNER_KEY:-}
       SHOPEE_REDIRECT_URI: ${SHOPEE_REDIRECT_URI:-http://localhost:5173/stores/shopee/callback}
     ports:
       - "8085:8085"
-    depends_on:
-      postgres:
-        condition: service_healthy
 
   tiktok-service:
     build:
@@ -109,17 +99,12 @@ services:
       - .env
     environment:
       TIKTOK_SERVICE_PORT: "8086"
-      DATABASE_URL: postgres://${POSTGRES_USER:-comms}:${POSTGRES_PASSWORD:-comms}@postgres:5432/${POSTGRES_DB:-communication}?sslmode=disable
-      DB_AUTO_MIGRATE: "true"
       GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
       TIKTOK_APP_KEY: ${TIKTOK_APP_KEY:-}
       TIKTOK_APP_SECRET: ${TIKTOK_APP_SECRET:-}
       TIKTOK_REDIRECT_URI: ${TIKTOK_REDIRECT_URI:-http://localhost:5173/stores/tiktok/callback}
     ports:
       - "8086:8086"
-    depends_on:
-      postgres:
-        condition: service_healthy
 
   gateway:
     build:

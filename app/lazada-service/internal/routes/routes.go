@@ -9,6 +9,7 @@ import (
 
 type Handlers struct {
 	Store *handler.StoreHandler
+	Order *handler.OrderHandler
 }
 
 func Register(app *fiber.App, h Handlers) {
@@ -17,10 +18,15 @@ func Register(app *fiber.App, h Handlers) {
 		return utils.Healthz(c, "lazada-service")
 	})
 
-	stores := api.Group("/stores")
-	stores.Get("/authorize-url", h.Store.AuthorizeURL)
-	stores.Post("/connect", h.Store.Connect)
-	stores.Get("/", h.Store.List)
-	stores.Delete("/:id", h.Store.Revoke)
-	stores.Post("/:id/refresh", h.Store.Refresh)
+	if h.Store != nil {
+		stores := api.Group("/stores")
+		stores.Get("/authorize-url", h.Store.AuthorizeURL)
+		stores.Post("/connect", h.Store.Connect)
+		stores.Post("/refresh", h.Store.Refresh)
+	}
+
+	if h.Order != nil {
+		orders := api.Group("/orders")
+		orders.Get("/", h.Order.List)
+	}
 }

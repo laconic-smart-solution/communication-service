@@ -17,9 +17,7 @@ import (
 
 	"github.com/laconic-smart-solution/communication-service/app/tiktok-service/internal/client"
 	"github.com/laconic-smart-solution/communication-service/app/tiktok-service/internal/config"
-	"github.com/laconic-smart-solution/communication-service/app/tiktok-service/internal/database"
 	"github.com/laconic-smart-solution/communication-service/app/tiktok-service/internal/handler"
-	"github.com/laconic-smart-solution/communication-service/app/tiktok-service/internal/repository"
 	"github.com/laconic-smart-solution/communication-service/app/tiktok-service/internal/routes"
 	"github.com/laconic-smart-solution/communication-service/app/tiktok-service/internal/service"
 	pkgmiddleware "github.com/laconic-smart-solution/communication-service/pkg/middleware"
@@ -39,15 +37,9 @@ func main() {
 		log.Fatal("TIKTOK_REDIRECT_URI is required")
 	}
 
-	db, err := database.Connect(cfg, log)
-	if err != nil {
-		log.WithError(err).Fatal("db connect")
-	}
-
 	tiktokClient := client.NewTikTokClient(cfg, 15)
-	storeRepo := repository.NewStoreRepository(db)
-	storeSvc := service.NewStoreService(log, storeRepo, tiktokClient)
-	orderSvc := service.NewOrderService(log, storeRepo)
+	storeSvc := service.NewStoreService(log, tiktokClient)
+	orderSvc := service.NewOrderService(log)
 
 	handlers := routes.Handlers{
 		Store: handler.NewStoreHandler(storeSvc),
