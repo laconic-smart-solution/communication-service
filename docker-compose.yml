@@ -115,7 +115,7 @@ services:
     env_file:
       - .env
     environment:
-      GATEWAY_PORT: "8080"
+      GATEWAY_PORT: "8099"
       GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
       GATEWAY_JWT_HMAC_SECRET: ${GATEWAY_JWT_HMAC_SECRET:-comms-local-dev-jwt-hmac-secret-ok!}
       FACEBOOK_SERVICE_URI: http://facebook-service:8081
@@ -125,7 +125,7 @@ services:
       TIKTOK_SERVICE_URI: http://tiktok-service:8086
       GATEWAY_CORS_ALLOWED_ORIGINS: ${GATEWAY_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     ports:
-      - "8080:8080"
+      - "8099:8099"
     depends_on:
       facebook-service:
         condition: service_started

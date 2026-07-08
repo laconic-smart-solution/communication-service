@@ -13,7 +13,7 @@ if exist ".env" (
   )
 )
 
-if not defined GATEWAY_PORT set GATEWAY_PORT=8080
+if not defined GATEWAY_PORT set GATEWAY_PORT=8099
 if not defined GATEWAY_SECRET set GATEWAY_SECRET=hello
 if not defined GATEWAY_JWT_HMAC_SECRET set GATEWAY_JWT_HMAC_SECRET=comms-local-dev-jwt-hmac-secret-ok!
 if not defined GATEWAY_CORS_ALLOWED_ORIGINS set GATEWAY_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
