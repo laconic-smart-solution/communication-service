@@ -2,26 +2,31 @@
 setlocal
 cd /d "%~dp0"
 
-where mvn >nul 2>&1
-if errorlevel 1 (
-  echo [ERROR] Maven not found. Install Maven or add mvnw.cmd to this folder.
+if not exist "mvnw.cmd" (
+  echo [ERROR] mvnw.cmd not found. Run this script from the gateway folder.
   exit /b 1
 )
 
-set GATEWAY_PORT=8080
-set GATEWAY_SECRET=hello
-set GATEWAY_JWT_HMAC_SECRET=comms-local-dev-jwt-hmac-secret-ok!
-set GATEWAY_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
-set FACEBOOK_SERVICE_URI=http://localhost:8081
-set LINE_SERVICE_URI=http://localhost:8083
-set LAZADA_SERVICE_URI=http://localhost:8084
-set SHOPEE_SERVICE_URI=http://localhost:8085
-set TIKTOK_SERVICE_URI=http://localhost:8086
+if exist ".env" (
+  for /f "usebackq eol=# tokens=1,* delims==" %%A in (".env") do (
+    if not "%%A"=="" set "%%A=%%B"
+  )
+)
+
+if not defined GATEWAY_PORT set GATEWAY_PORT=8080
+if not defined GATEWAY_SECRET set GATEWAY_SECRET=hello
+if not defined GATEWAY_JWT_HMAC_SECRET set GATEWAY_JWT_HMAC_SECRET=comms-local-dev-jwt-hmac-secret-ok!
+if not defined GATEWAY_CORS_ALLOWED_ORIGINS set GATEWAY_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+if not defined FACEBOOK_SERVICE_URI set FACEBOOK_SERVICE_URI=http://localhost:8081
+if not defined LINE_SERVICE_URI set LINE_SERVICE_URI=http://localhost:8083
+if not defined LAZADA_SERVICE_URI set LAZADA_SERVICE_URI=http://localhost:8084
+if not defined SHOPEE_SERVICE_URI set SHOPEE_SERVICE_URI=http://localhost:8085
+if not defined TIKTOK_SERVICE_URI set TIKTOK_SERVICE_URI=http://localhost:8086
 
 echo [INFO] Starting communication-gateway on port %GATEWAY_PORT%...
 echo [INFO] Health: http://localhost:%GATEWAY_PORT%/actuator/health
 echo [INFO] Lazada proxy: http://localhost:%GATEWAY_PORT%/comms/lazada/api/v1/healthz
 echo.
 
-mvn spring-boot:run %*
+call mvnw.cmd spring-boot:run %*
 exit /b %errorlevel%
