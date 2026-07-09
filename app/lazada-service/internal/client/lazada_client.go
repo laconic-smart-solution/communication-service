@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	authBaseURL     = "https://auth.lazada.com/rest"
-	tokenCreatePath = "/auth/token/create"
+	authBaseURL      = "https://auth.lazada.com/rest"
+	defaultAuthURL   = "https://auth.lazada.com/oauth/authorize"
+	tokenCreatePath  = "/auth/token/create"
 	tokenRefreshPath = "/auth/token/refresh"
 )
 
@@ -48,6 +49,9 @@ type lazadaClientImpl struct {
 	appKey      string
 	appSecret   string
 	redirectURI string
+	country     string
+	forceAuth   bool
+	authBaseURL string
 	httpClient  *http.Client
 }
 
@@ -61,6 +65,9 @@ func NewLazadaClient(cfg *config.Config, timeoutSec int) LazadaClient {
 		appKey:      cfg.LazadaAppKey,
 		appSecret:   cfg.LazadaAppSecret,
 		redirectURI: cfg.LazadaRedirectURI,
+		country:     cfg.LazadaCountry,
+		forceAuth:   cfg.LazadaForceAuth,
+		authBaseURL: resolveAuthorizeBaseURL(cfg.LazadaAuthBaseURL, cfg.LazadaCountry),
 		httpClient:  &http.Client{Timeout: time.Duration(timeoutSec) * time.Second},
 	}
 }
@@ -68,13 +75,47 @@ func NewLazadaClient(cfg *config.Config, timeoutSec int) LazadaClient {
 func (c *lazadaClientImpl) BuildAuthorizeURL(state string) string {
 	q := url.Values{}
 	q.Set("response_type", "code")
-	q.Set("force_auth", "true")
-	q.Set("redirect_uri", c.redirectURI)
 	q.Set("client_id", c.appKey)
+	q.Set("redirect_uri", c.redirectURI)
+	if c.forceAuth {
+		q.Set("force_auth", "true")
+	}
+	if c.country != "" {
+		q.Set("country", c.country)
+	}
 	if state != "" {
 		q.Set("state", state)
 	}
-	return "https://auth.lazada.com/oauth/authorize?" + q.Encode()
+	return c.authBaseURL + "?" + q.Encode()
+}
+
+func resolveAuthorizeBaseURL(explicitBaseURL, country string) string {
+	if explicitBaseURL != "" {
+		return explicitBaseURL
+	}
+	if regional, ok := regionalAuthorizeURL(country); ok {
+		return regional
+	}
+	return defaultAuthURL
+}
+
+func regionalAuthorizeURL(country string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(country)) {
+	case "th":
+		return "https://api.lazada.co.th/oauth/authorize", true
+	case "sg":
+		return "https://api.lazada.sg/oauth/authorize", true
+	case "my":
+		return "https://api.lazada.com.my/oauth/authorize", true
+	case "ph":
+		return "https://api.lazada.com.ph/oauth/authorize", true
+	case "id":
+		return "https://api.lazada.co.id/oauth/authorize", true
+	case "vn":
+		return "https://api.lazada.vn/oauth/authorize", true
+	default:
+		return "", false
+	}
 }
 
 func (c *lazadaClientImpl) ExchangeToken(ctx context.Context, code string) (*TokenPair, error) {

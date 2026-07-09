@@ -68,7 +68,9 @@ services:
       GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
       LAZADA_APP_KEY: ${LAZADA_APP_KEY:-}
       LAZADA_APP_SECRET: ${LAZADA_APP_SECRET:-}
-      LAZADA_REDIRECT_URI: ${LAZADA_REDIRECT_URI:-https://ranked-savanna-baggage.ngrok-free.dev/stores/lazada/callback}
+      LAZADA_REDIRECT_URI: ${LAZADA_REDIRECT_URI:-https://dev-laco-invoice.laconic.co.th/stores/lazada/callback}
+      LAZADA_COUNTRY: ${LAZADA_COUNTRY:-th}
+      LAZADA_FORCE_AUTH: ${LAZADA_FORCE_AUTH:-false}
     ports:
       - "8084:8084"
 

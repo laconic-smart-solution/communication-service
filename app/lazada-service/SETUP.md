@@ -48,6 +48,9 @@ cp app/lazada-service/.env.example app/lazada-service/.env
 | `LAZADA_APP_KEY` | yes | — | Lazada app key from Open Platform console |
 | `LAZADA_APP_SECRET` | yes | — | Lazada app secret |
 | `LAZADA_REDIRECT_URI` | yes | — | OAuth callback URL registered in Lazada app |
+| `LAZADA_COUNTRY` | no | — | Seller country (`th`, `sg`, `my`, …). Uses regional OAuth URL when set. |
+| `LAZADA_FORCE_AUTH` | no | `false` | Set `true` only when you need to force a fresh Lazada auth session. |
+| `LAZADA_AUTH_BASE_URL` | no | — | Override authorize URL (defaults to regional or `auth.lazada.com`). |
 
 ### Example `.env` (local)
 
@@ -59,7 +62,9 @@ DB_AUTO_MIGRATE=true
 GATEWAY_SECRET=hello
 LAZADA_APP_KEY=your_app_key
 LAZADA_APP_SECRET=your_app_secret
-LAZADA_REDIRECT_URI=http://localhost:5173/lazada/callback
+LAZADA_REDIRECT_URI=https://dev-laco-invoice.laconic.co.th/stores/lazada/callback
+LAZADA_COUNTRY=th
+LAZADA_FORCE_AUTH=false
 ```
 
 ---
