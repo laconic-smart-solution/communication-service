@@ -20,3 +20,12 @@ type ListOrdersRequest struct {
 	SellerID    string `query:"seller_id"`
 	UpdatedFrom string `query:"updated_from"`
 }
+
+type ListProductsRequest struct {
+	AccessToken string `query:"access_token" validate:"required"`
+	SellerID    string `query:"seller_id"`
+	ShopID      string `query:"shop_id"`
+	Page        int    `query:"page" validate:"omitempty,min=1"`
+	Limit       int    `query:"limit" validate:"omitempty,min=1,max=100"`
+	Search      string `query:"search"`
+}

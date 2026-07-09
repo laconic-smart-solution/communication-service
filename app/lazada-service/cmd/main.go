@@ -40,10 +40,12 @@ func main() {
 	lazadaClient := client.NewLazadaClient(cfg, 15)
 	storeSvc := service.NewStoreService(log, lazadaClient)
 	orderSvc := service.NewOrderService(log, lazadaClient)
+	productSvc := service.NewProductService(log, lazadaClient)
 
 	handlers := routes.Handlers{
-		Store: handler.NewStoreHandler(storeSvc),
-		Order: handler.NewOrderHandler(orderSvc),
+		Store:   handler.NewStoreHandler(storeSvc),
+		Order:   handler.NewOrderHandler(orderSvc),
+		Product: handler.NewProductHandler(productSvc),
 	}
 
 	app := fiber.New(fiber.Config{

@@ -103,6 +103,45 @@ Base path: `/api/v1/orders`
 
 laco-invoice reads `access_token` from `store_marketplace_connections` and passes it to the marketplace service.
 
+## Products API
+
+Base path: `/api/v1/products`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/?access_token=&seller_id=&shop_id=&page=&limit=&search=` | Fetch products using caller-supplied access token |
+
+### Query parameters
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `access_token` | Yes | OAuth access token from laco-invoice |
+| `seller_id` | No | Seller ID (Lazada) |
+| `shop_id` | No | Shop ID (Shopee/TikTok; may duplicate `seller_id`) |
+| `page` | No | Page number (default `1`) |
+| `limit` | No | Page size (default `20`, max `100`) |
+| `search` | No | Vendor-specific search filter |
+
+### Product list response (`data`)
+
+```json
+{
+  "items": [
+    {
+      "external_product_id": "123456",
+      "sku": "SKU-001",
+      "name": "Product name",
+      "price": "99.00",
+      "currency": "THB",
+      "status": "active"
+    }
+  ],
+  "total": 128
+}
+```
+
+Lazada implements `/products/get` against the regional REST API. Shopee and TikTok return the same envelope; vendor calls may return empty lists until implemented.
+
 ## Adding a new marketplace
 
 1. Copy `app/lazada-service/` layout to `app/{platform}-service/` (stateless, no database).
@@ -111,3 +150,4 @@ laco-invoice reads `access_token` from `store_marketplace_connections` and passe
 4. Add laco-invoice `integration/{platform}/` client + `features/store/{platform}/` BFF.
 5. Register marketplace in client `SUPPORTED_MARKETPLACES` config.
 6. Implement `MarketplaceOrderAdapter` for order sync.
+7. Implement `MarketplaceProductAdapter` for read-through product listing.

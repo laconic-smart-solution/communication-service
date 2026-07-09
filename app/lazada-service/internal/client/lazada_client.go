@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/config"
+	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/response"
 )
 
 const (
@@ -43,6 +44,7 @@ type LazadaClient interface {
 	BuildAuthorizeURL(state string) string
 	ExchangeToken(ctx context.Context, code string) (*TokenPair, error)
 	RefreshToken(ctx context.Context, refreshToken string) (*TokenPair, error)
+	ListProducts(ctx context.Context, accessToken string, page, limit int, search string) (*response.ProductListResponse, error)
 }
 
 type lazadaClientImpl struct {

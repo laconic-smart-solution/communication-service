@@ -40,10 +40,12 @@ func main() {
 	shopeeClient := client.NewShopeeClient(cfg, 15)
 	storeSvc := service.NewStoreService(log, shopeeClient)
 	orderSvc := service.NewOrderService(log)
+	productSvc := service.NewProductService(log)
 
 	handlers := routes.Handlers{
-		Store: handler.NewStoreHandler(storeSvc),
-		Order: handler.NewOrderHandler(orderSvc),
+		Store:   handler.NewStoreHandler(storeSvc),
+		Order:   handler.NewOrderHandler(orderSvc),
+		Product: handler.NewProductHandler(productSvc),
 	}
 
 	app := fiber.New(fiber.Config{

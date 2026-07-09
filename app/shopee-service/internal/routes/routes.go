@@ -8,8 +8,9 @@ import (
 )
 
 type Handlers struct {
-	Store *handler.StoreHandler
-	Order *handler.OrderHandler
+	Store   *handler.StoreHandler
+	Order   *handler.OrderHandler
+	Product *handler.ProductHandler
 }
 
 func Register(app *fiber.App, h Handlers) {
@@ -28,5 +29,10 @@ func Register(app *fiber.App, h Handlers) {
 	if h.Order != nil {
 		orders := api.Group("/orders")
 		orders.Get("/", h.Order.List)
+	}
+
+	if h.Product != nil {
+		products := api.Group("/products")
+		products.Get("/", h.Product.List)
 	}
 }

@@ -40,10 +40,12 @@ func main() {
 	tiktokClient := client.NewTikTokClient(cfg, 15)
 	storeSvc := service.NewStoreService(log, tiktokClient)
 	orderSvc := service.NewOrderService(log)
+	productSvc := service.NewProductService(log)
 
 	handlers := routes.Handlers{
-		Store: handler.NewStoreHandler(storeSvc),
-		Order: handler.NewOrderHandler(orderSvc),
+		Store:   handler.NewStoreHandler(storeSvc),
+		Order:   handler.NewOrderHandler(orderSvc),
+		Product: handler.NewProductHandler(productSvc),
 	}
 
 	app := fiber.New(fiber.Config{
