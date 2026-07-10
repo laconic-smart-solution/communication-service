@@ -13,6 +13,7 @@ import (
 
 type ProductService interface {
 	List(ctx context.Context, req request.ListProductsRequest) (*response.ProductListResponse, error)
+	Get(ctx context.Context, req request.GetProductRequest) (*response.ProductDetailResponse, error)
 }
 
 type productServiceImpl struct {
@@ -46,6 +47,18 @@ func (s *productServiceImpl) List(ctx context.Context, req request.ListProductsR
 		}
 		s.logger.WithError(err).Error("list products")
 		return nil, errors.New("failed to list products")
+	}
+	return result, nil
+}
+
+func (s *productServiceImpl) Get(ctx context.Context, req request.GetProductRequest) (*response.ProductDetailResponse, error) {
+	result, err := s.client.GetProduct(ctx, req.AccessToken, req.ExternalProductID, req.SKU)
+	if err != nil {
+		if errors.Is(err, client.ErrRateLimited) {
+			return nil, errors.New("lazada rate limit exceeded")
+		}
+		s.logger.WithError(err).Error("get product")
+		return nil, errors.New("failed to get product")
 	}
 	return result, nil
 }

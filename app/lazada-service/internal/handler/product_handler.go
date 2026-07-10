@@ -35,3 +35,26 @@ func (h *ProductHandler) List(c *fiber.Ctx) error {
 	}
 	return utils.OK(c, res)
 }
+
+func (h *ProductHandler) Get(c *fiber.Ctx) error {
+	if _, err := utils.RequireTenantID(c); err != nil {
+		return utils.BadRequest(c, err)
+	}
+
+	var req request.GetProductRequest
+	if err := c.ParamsParser(&req); err != nil {
+		return utils.BadRequest(c, err)
+	}
+	if err := c.QueryParser(&req); err != nil {
+		return utils.BadRequest(c, err)
+	}
+	if err := utils.ValidateStruct(req); err != nil {
+		return utils.BadRequest(c, err)
+	}
+
+	res, err := h.svc.Get(c.Context(), req)
+	if err != nil {
+		return utils.BadRequest(c, err)
+	}
+	return utils.OK(c, res)
+}

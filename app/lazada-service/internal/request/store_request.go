@@ -29,3 +29,11 @@ type ListProductsRequest struct {
 	Limit       int    `query:"limit" validate:"omitempty,min=1,max=100"`
 	Search      string `query:"search"`
 }
+
+type GetProductRequest struct {
+	AccessToken       string `query:"access_token" validate:"required"`
+	SellerID          string `query:"seller_id"`
+	ShopID            string `query:"shop_id"`
+	ExternalProductID string `params:"externalProductId"`
+	SKU               string `query:"sku"`
+}

@@ -34,5 +34,6 @@ func Register(app *fiber.App, h Handlers) {
 	if h.Product != nil {
 		products := api.Group("/products")
 		products.Get("/", h.Product.List)
+		products.Get("/:externalProductId", h.Product.Get)
 	}
 }

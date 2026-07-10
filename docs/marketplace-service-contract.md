@@ -110,8 +110,9 @@ Base path: `/api/v1/products`
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/?access_token=&seller_id=&shop_id=&page=&limit=&search=` | Fetch products using caller-supplied access token |
+| GET | `/{externalProductId}?access_token=&seller_id=&shop_id=&sku=` | Fetch single product detail |
 
-### Query parameters
+### Query parameters (list)
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
@@ -141,6 +142,32 @@ Base path: `/api/v1/products`
 ```
 
 Lazada implements `/products/get` against the regional REST API. Shopee and TikTok return the same envelope; vendor calls may return empty lists until implemented.
+
+### Product detail response (`data`)
+
+```json
+{
+  "external_product_id": "123456",
+  "sku": "SKU-001",
+  "name": "Product name",
+  "description": "Description",
+  "price": "99.00",
+  "currency": "THB",
+  "status": "active",
+  "images": ["https://..."],
+  "variants": [
+    {
+      "sku": "SKU-001",
+      "price": "99.00",
+      "currency": "THB",
+      "status": "active",
+      "quantity": "10"
+    }
+  ]
+}
+```
+
+Lazada implements `/product/item/get`. Shopee and TikTok detail endpoints return `404` until implemented.
 
 ## Adding a new marketplace
 
