@@ -355,10 +355,13 @@ func Register(app *fiber.App, h Handlers, auth fiber.Handler) {
 |---------|------------------|
 | `facebook-service` | `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`, `FACEBOOK_VERIFY_TOKEN` |
 | `instagram-service` | `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` |
-| `line-service` | `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` |
-| all | `PORT`, `DATABASE_URL`, `GATEWAY_SECRET`, `LOG_LEVEL` |
+| `line-service` | `GATEWAY_SECRET`, `LINE_SERVICE_PORT` (credentials come from callers) |
+| all | `PORT` / service-specific port, `GATEWAY_SECRET`, `LOG_LEVEL` |
+| stateful services | `DATABASE_URL` (e.g. facebook-service) |
 
-Per-tenant tokens are stored in the database, not in env vars.
+LINE channel secret/token are **not** service env vars. Callers pass `X-Line-Channel-Access-Token` and webhook `channel_secret`. See [INTEGRATION.md](../app/line-service/INTEGRATION.md).
+
+Per-tenant tokens for stateful services are stored in the database, not in env vars.
 
 ---
 
