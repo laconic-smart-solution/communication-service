@@ -27,16 +27,17 @@ type SendMessageInput struct {
 }
 
 type InboundEvent struct {
-	Type      string
-	UserID    string
-	MessageID string
-	Text      string
+	Type      string `json:"type"`
+	UserID    string `json:"user_id"`
+	MessageID string `json:"message_id"`
+	Text      string `json:"text"`
 }
 
 type LINEClient interface {
 	SendMessage(ctx context.Context, in SendMessageInput) error
 	VerifyWebhook(signature string, body []byte, channelSecret string) error
 	ParseWebhook(body []byte) ([]InboundEvent, error)
+	ForwardEvents(ctx context.Context, callbackURL string, events []InboundEvent) error
 }
 
 type lineClientImpl struct {
@@ -141,4 +142,31 @@ func (c *lineClientImpl) ParseWebhook(body []byte) ([]InboundEvent, error) {
 		})
 	}
 	return out, nil
+}
+
+func (c *lineClientImpl) ForwardEvents(ctx context.Context, callbackURL string, events []InboundEvent) error {
+	payload, err := json.Marshal(map[string]interface{}{
+		"events": events,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal callback payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, callbackURL, bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("create callback request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("callback request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("callback status %d: %s", resp.StatusCode, string(b))
+	}
+	return nil
 }

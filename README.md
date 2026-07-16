@@ -9,9 +9,9 @@ CORS, and a shared gateway secret.
 
 | Capability | Description |
 |------------|-------------|
-| **Outbound messaging** | Send text and media via LINE (and similar platform APIs). |
-| **Channel / store connections** | Link and revoke OAuth credentials per tenant. |
-| **Inbound webhooks** | Verify vendor signatures and persist events. |
+| **Outbound messaging** | Send text via LINE using caller-supplied channel access tokens. |
+| **Channel / store connections** | Facebook (DB) and Lazada OAuth; LINE credentials stay in calling apps. |
+| **Inbound webhooks** | Verify vendor signatures; LINE optionally forwards parsed events to your callback URL. |
 | **Marketplace setup** | Lazada seller OAuth and store connection (Laco Invoice). |
 
 ### Services
@@ -20,7 +20,7 @@ CORS, and a shared gateway secret.
 |---------|------|------|
 | `gateway` | `8080` | Spring Cloud Gateway — JWT, CORS, routing |
 | `facebook-service` | `8081` | Meta Graph API ([setup](app/facebook-service/SETUP.md)) |
-| `line-service` | `8083` | LINE Messaging API ([setup](app/line-service/SETUP.md)) |
+| `line-service` | `8083` | LINE Messaging API proxy ([integration](app/line-service/INTEGRATION.md)) |
 | `lazada-service` | `8084` | Lazada Open Platform store connect ([setup](app/lazada-service/SETUP.md)) |
 
 Each service is **independently deployable** (own `cmd/main.go`, config, Dockerfile).
@@ -48,8 +48,8 @@ Public REST paths:
 Within each Go service:
 
 ```
-handler → service → repository (Postgres)
-                 → client   (vendor HTTP)
+handler → service → client (vendor HTTP)
+                 → repository (Postgres)   # facebook-service only among messaging peers
 ```
 
 Shared response envelope lives in root [`pkg/response`](pkg/response/) and [`pkg/utils`](pkg/utils/).

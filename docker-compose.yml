@@ -46,14 +46,9 @@ services:
       - .env
     environment:
       LINE_SERVICE_PORT: "8083"
-      DATABASE_URL: postgres://${POSTGRES_USER:-comms}:${POSTGRES_PASSWORD:-comms}@postgres:5432/${POSTGRES_DB:-communication}?sslmode=disable
-      DB_AUTO_MIGRATE: "true"
       GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
     ports:
       - "8083:8083"
-    depends_on:
-      postgres:
-        condition: service_healthy
 
   lazada-service:
     build:
