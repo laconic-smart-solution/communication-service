@@ -38,6 +38,7 @@ func main() {
 	handlers := routes.Handlers{
 		Message: handler.NewMessageHandler(messageSvc),
 		Webhook: handler.NewWebhookHandler(webhookSvc),
+		QR:      handler.NewQRHandler(service.NewQRService()),
 	}
 
 	app := fiber.New(fiber.Config{

@@ -45,7 +45,7 @@ func (s *webhookServiceImpl) Handle(ctx context.Context, signature string, body 
 	}
 
 	callbackURL = strings.TrimSpace(callbackURL)
-	if callbackURL == "" {
+	if callbackURL == "" || len(events) == 0 {
 		return nil
 	}
 

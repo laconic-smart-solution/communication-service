@@ -19,9 +19,17 @@ Calling app                    line-service                 LINE
      │                              │────────────────────────►│
      │◄─────────────────────────────│                         │
      │                              │                         │
+     │  GET /qr?basic_id=@…         │  (no LINE call)         │
+     │─────────────────────────────►│                         │
+     │◄─────────────────────────────│                         │
+     │        image/png             │                         │
+     │                              │                         │
      │  (optional) callback         │  webhook                │
      │◄─────────────────────────────│◄────────────────────────│
      │                              │  ?channel_secret=...    │
+     │                              │                         │
+     │  follow ⇒ POST /messages (auto-greet, driven by you)   │
+     │─────────────────────────────►│────────────────────────►│
 ```
 
 | Owned by calling app | Owned by line-service |
@@ -29,6 +37,7 @@ Calling app                    line-service                 LINE
 | Channel secret | Gateway shared secret |
 | Channel access token | HTTP proxy to LINE |
 | Message history / tenant data | Signature verify + optional event forward |
+| Welcome / auto-reply copy | Add-friend QR rendering |
 
 ---
 
@@ -160,7 +169,53 @@ curl -X POST http://localhost:8099/comms/line/api/v1/messages \
   -d '{"recipient_id":"Uxxxxxxxx","text":"Hello"}'
 ```
 
-### 2. Inbound webhook
+### 2. Add-friend QR code
+
+`GET /api/v1/qr`  
+Via gateway: `GET /comms/line/api/v1/qr`
+
+Renders a QR code for an official account's add-friend page
+(`https://line.me/R/ti/p/%40<basic_id>`). Scanning it opens the OA profile in LINE.
+No LINE credentials are involved — this endpoint calls no LINE API.
+
+**Headers (required):**
+
+| Header | Description |
+|--------|-------------|
+| `X-Gateway-Secret` | Shared secret (injected by gateway; required if calling service directly) |
+| `X-Tenant-ID` | Tenant UUID (optional locally with fallback) |
+
+**Query:**
+
+| Query | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `basic_id` | yes | — | OA basic ID, e.g. `@136laxkx` (a missing `@` is added) |
+| `size` | no | `256` | PNG width/height in px, `64`–`1024` |
+| `format` | no | — | `json` returns the envelope below; otherwise raw `image/png` |
+
+**PNG (default):** responds `image/png` with `Cache-Control: public, max-age=86400`.
+
+**JSON (`format=json`, 200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "basic_id": "@136laxkx",
+    "add_friend_url": "https://line.me/R/ti/p/%40136laxkx",
+    "qr_image": "data:image/png;base64,iVBORw0KGgo..."
+  }
+}
+```
+
+**cURL:**
+
+```bash
+curl -H "X-Gateway-Secret: hello" \
+  "http://localhost:8083/api/v1/qr?basic_id=@136laxkx&size=300" --output qr.png
+```
+
+### 3. Inbound webhook
 
 `POST /api/v1/webhooks`  
 Via gateway: `POST /comms/line/api/v1/webhooks`  
@@ -186,23 +241,34 @@ https://<your-gateway-host>/comms/line/api/v1/webhooks?channel_secret=<CHANNEL_S
 **Behavior:**
 
 1. Verify HMAC-SHA256 signature with `channel_secret`.
-2. Parse text message events.
-3. If `callback_url` is set, `POST` to your app:
+2. Parse events. Forwarded types:
+
+   | `type` | Meaning | Fields |
+   |--------|---------|--------|
+   | `message` | Inbound **text** message (other message types are dropped) | `user_id`, `reply_token`, `message_id`, `text` |
+   | `follow` | User added the OA as a friend | `user_id`, `reply_token` |
+   | `unfollow` | User blocked / removed the OA | `user_id` |
+
+3. If `callback_url` is set **and** at least one event survived parsing, `POST` to your app:
 
 ```json
 {
   "events": [
-    {
-      "type": "message",
-      "user_id": "Uxxxxxxxx",
-      "message_id": "…",
-      "text": "hi"
-    }
+    { "type": "follow", "user_id": "Uxxxxxxxx", "reply_token": "…" },
+    { "type": "message", "user_id": "Uxxxxxxxx", "reply_token": "…", "message_id": "…", "text": "hi" }
   ]
 }
 ```
 
 4. Return HTTP `200` to LINE when the signature is valid.
+
+> **Adding a friend needs no approval.** LINE has no "accept friend request" API —
+> a `follow` is already final when it reaches you. To auto-greet a new friend,
+> react to the `follow` event by calling `POST /api/v1/messages` with `user_id`
+> as `recipient_id`. line-service holds no token and so never replies on your behalf.
+
+**Note:** line-service sends **no auth header** on the callback. Put a secret token
+on your `callback_url` query string and verify it in your handler.
 
 Treat the webhook URL as **sensitive** (it embeds the channel secret). Use HTTPS only.
 
@@ -213,8 +279,10 @@ Treat the webhook URL as **sensitive** (it embeds the channel secret). Use HTTPS
 1. Store `channel_secret` and `channel_access_token` in your own database/secrets store.
 2. On send: pass token as `X-Line-Channel-Access-Token`; never persist tokens in line-service.
 3. Register webhook URL with your `channel_secret` (and optional `callback_url`) in LINE Console.
-4. Implement `callback_url` handler if you need inbound messages.
-5. Use the same `GATEWAY_SECRET` / JWT flow as other `/comms/**` services.
+4. Implement `callback_url` handler if you need inbound messages or `follow` auto-greeting;
+   protect it with a token on the query string.
+5. Show the add-friend QR with `GET /api/v1/qr?basic_id=@yourid`.
+6. Use the same `GATEWAY_SECRET` / JWT flow as other `/comms/**` services.
 
 ---
 
@@ -225,6 +293,9 @@ Treat the webhook URL as **sensitive** (it embeds the channel secret). Use HTTPS
 | Missing access token header | `400` — `X-Line-Channel-Access-Token header is required` |
 | Invalid / expired LINE token | `400` — `invalid line channel token` |
 | LINE rate limit | `400` — `line rate limit exceeded` |
+| Missing `basic_id` on QR | `400` — `basic_id query parameter is required` |
+| Malformed `basic_id` | `400` — `basic_id must look like @136laxkx` |
+| QR `size` out of range | `400` — `size must be between 64 and 1024` |
 | Missing `channel_secret` on webhook | `400` — `channel_secret query parameter is required` |
 | Bad `X-Line-Signature` | `400` — `invalid webhook signature` |
 | `callback_url` not HTTPS | `400` — `callback_url must be a valid https URL` |

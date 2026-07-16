@@ -26,11 +26,19 @@ type SendMessageInput struct {
 	Text        string
 }
 
+// Event types forwarded to the calling app.
+const (
+	EventTypeMessage  = "message"
+	EventTypeFollow   = "follow"
+	EventTypeUnfollow = "unfollow"
+)
+
 type InboundEvent struct {
-	Type      string `json:"type"`
-	UserID    string `json:"user_id"`
-	MessageID string `json:"message_id"`
-	Text      string `json:"text"`
+	Type       string `json:"type"`
+	UserID     string `json:"user_id"`
+	ReplyToken string `json:"reply_token,omitempty"`
+	MessageID  string `json:"message_id,omitempty"`
+	Text       string `json:"text,omitempty"`
 }
 
 type LINEClient interface {
@@ -114,8 +122,9 @@ func (c *lineClientImpl) VerifyWebhook(signature string, body []byte, channelSec
 func (c *lineClientImpl) ParseWebhook(body []byte) ([]InboundEvent, error) {
 	var payload struct {
 		Events []struct {
-			Type    string `json:"type"`
-			Message struct {
+			Type       string `json:"type"`
+			ReplyToken string `json:"replyToken"`
+			Message    struct {
 				ID   string `json:"id"`
 				Type string `json:"type"`
 				Text string `json:"text"`
@@ -131,15 +140,27 @@ func (c *lineClientImpl) ParseWebhook(body []byte) ([]InboundEvent, error) {
 
 	out := make([]InboundEvent, 0, len(payload.Events))
 	for _, ev := range payload.Events {
-		if ev.Type != "message" || ev.Message.Type != "text" {
-			continue
+		switch ev.Type {
+		case EventTypeMessage:
+			if ev.Message.Type != "text" {
+				continue
+			}
+			out = append(out, InboundEvent{
+				Type:       ev.Type,
+				UserID:     ev.Source.UserID,
+				ReplyToken: ev.ReplyToken,
+				MessageID:  ev.Message.ID,
+				Text:       ev.Message.Text,
+			})
+		case EventTypeFollow, EventTypeUnfollow:
+			// A follow is LINE's "user added the OA as a friend" signal; there is
+			// nothing to accept, so it is forwarded for the calling app to greet.
+			out = append(out, InboundEvent{
+				Type:       ev.Type,
+				UserID:     ev.Source.UserID,
+				ReplyToken: ev.ReplyToken,
+			})
 		}
-		out = append(out, InboundEvent{
-			Type:      ev.Type,
-			UserID:    ev.Source.UserID,
-			MessageID: ev.Message.ID,
-			Text:      ev.Message.Text,
-		})
 	}
 	return out, nil
 }

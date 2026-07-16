@@ -10,6 +10,7 @@ import (
 type Handlers struct {
 	Message *handler.MessageHandler
 	Webhook *handler.WebhookHandler
+	QR      *handler.QRHandler
 }
 
 func Register(app *fiber.App, h Handlers) {
@@ -20,4 +21,5 @@ func Register(app *fiber.App, h Handlers) {
 
 	api.Post("/webhooks", h.Webhook.Handle)
 	api.Post("/messages", h.Message.Send)
+	api.Get("/qr", h.QR.Get)
 }
