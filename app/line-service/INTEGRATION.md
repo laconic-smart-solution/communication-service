@@ -73,8 +73,11 @@ GATEWAY_SECRET=hello
 ## Run locally
 
 ```bash
-# from communication-service root
-go run ./app/line-service/cmd/main.go
+# from app/line-service (Windows)
+run.bat
+
+# or from communication-service root
+go run ./app/line-service/cmd
 ```
 
 Health:
