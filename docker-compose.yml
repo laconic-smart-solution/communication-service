@@ -131,6 +131,20 @@ services:
     ports:
       - "8088:8088"
 
+  whatsapp-service:
+    build:
+      context: .
+      dockerfile: app/whatsapp-service/Dockerfile
+    container_name: comms-whatsapp-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      WHATSAPP_SERVICE_PORT: "8089"
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
+    ports:
+      - "8089:8089"
+
   gateway:
     build:
       context: app/gateway
@@ -150,6 +164,7 @@ services:
       TIKTOK_SERVICE_URI: http://tiktok-service:8086
       TELEGRAM_SERVICE_URI: http://telegram-service:8087
       VIBER_SERVICE_URI: http://viber-service:8088
+      WHATSAPP_SERVICE_URI: http://whatsapp-service:8089
       GATEWAY_CORS_ALLOWED_ORIGINS: ${GATEWAY_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     ports:
       - "8099:8099"
@@ -167,6 +182,8 @@ services:
       telegram-service:
         condition: service_started
       viber-service:
+        condition: service_started
+      whatsapp-service:
         condition: service_started
 
 volumes:

@@ -64,6 +64,13 @@ spring:
           filters:
             - RewritePath=/comms/viber/(?<segment>.*), /${segment}
 
+        - id: comms-whatsapp
+          uri: ${WHATSAPP_SERVICE_URI:http://localhost:8089}
+          predicates:
+            - Path=/comms/whatsapp/**
+          filters:
+            - RewritePath=/comms/whatsapp/(?<segment>.*), /${segment}
+
 management:
   endpoints:
     web:
