@@ -32,7 +32,13 @@ func main() {
 	}
 
 	lineClient := client.NewLINEClient(15)
-	messageSvc := service.NewMessageService(log, lineClient)
+	batchCfg := service.BatchConfig{
+		MinInterval:   cfg.BatchMinInterval,
+		MaxRecipients: cfg.BatchMaxRecipients,
+		MaxRetries:    3,
+		BackoffBase:   time.Second,
+	}
+	messageSvc := service.NewMessageService(log, lineClient, batchCfg)
 	webhookSvc := service.NewWebhookService(log, lineClient)
 
 	handlers := routes.Handlers{
@@ -44,7 +50,7 @@ func main() {
 	app := fiber.New(fiber.Config{
 		AppName:      "line-service",
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		WriteTimeout: 5 * time.Minute,
 		IdleTimeout:  60 * time.Second,
 	})
 

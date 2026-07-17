@@ -47,3 +47,31 @@ func (h *MessageHandler) Send(c *fiber.Ctx) error {
 	}
 	return utils.Created(c, res)
 }
+
+func (h *MessageHandler) SendBatch(c *fiber.Ctx) error {
+	if _, err := utils.RequireTenantID(c); err != nil {
+		return utils.BadRequest(c, err)
+	}
+	if _, err := utils.RequireActorID(c); err != nil {
+		return utils.Unauthorized(c, err)
+	}
+
+	accessToken := c.Get(headerLineChannelAccessToken)
+	if accessToken == "" {
+		return utils.BadRequest(c, errors.New("X-Line-Channel-Access-Token header is required"))
+	}
+
+	var req request.SendBatchMessageRequest
+	if err := c.BodyParser(&req); err != nil {
+		return utils.BadRequest(c, err)
+	}
+	if err := utils.ValidateStruct(req); err != nil {
+		return utils.BadRequest(c, err)
+	}
+
+	res, err := h.svc.SendBatch(c.Context(), accessToken, req)
+	if err != nil {
+		return utils.BadRequest(c, err)
+	}
+	return utils.Created(c, res)
+}

@@ -21,5 +21,6 @@ func Register(app *fiber.App, h Handlers) {
 
 	api.Post("/webhooks", h.Webhook.Handle)
 	api.Post("/messages", h.Message.Send)
+	api.Post("/messages/batch", h.Message.SendBatch)
 	api.Get("/qr", h.QR.Get)
 }

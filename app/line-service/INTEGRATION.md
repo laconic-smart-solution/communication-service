@@ -19,6 +19,10 @@ Calling app                    line-service                 LINE
      │                              │────────────────────────►│
      │◄─────────────────────────────│                         │
      │                              │                         │
+     │  POST /messages/batch        │  multicast (chunks)     │
+     │─────────────────────────────►│────────────────────────►│
+     │◄─────────────────────────────│  rate-limit + retry     │
+     │                              │                         │
      │  GET /qr?basic_id=@…         │  (no LINE call)         │
      │─────────────────────────────►│                         │
      │◄─────────────────────────────│                         │
@@ -65,6 +69,8 @@ cp app/line-service/.env.example app/line-service/.env
 | `PORT` | no | — | Fallback if `LINE_SERVICE_PORT` is unset |
 | `LOG_LEVEL` | no | `info` | `debug`, `info`, `warn`, `error` |
 | `GATEWAY_SECRET` | yes | — | Must match gateway (`X-Gateway-Secret`) |
+| `LINE_BATCH_MIN_INTERVAL_MS` | no | `250` | Delay between multicast chunks |
+| `LINE_BATCH_MAX_RECIPIENTS` | no | `10000` | Max unique recipient IDs per batch request |
 
 Do **not** set `LINE_CHANNEL_SECRET` or `LINE_CHANNEL_ACCESS_TOKEN` on this service.
 Those values live in your application and are sent per request.
@@ -169,7 +175,76 @@ curl -X POST http://localhost:8099/comms/line/api/v1/messages \
   -d '{"recipient_id":"Uxxxxxxxx","text":"Hello"}'
 ```
 
-### 2. Add-friend QR code
+### 2. Send batch / multicast (outbound)
+
+`POST /api/v1/messages/batch`  
+Via gateway: `POST /comms/line/api/v1/messages/batch`
+
+Sends the same text to many LINE user IDs using LINE **Multicast**
+(`POST https://api.line.me/v2/bot/message/multicast`).
+
+**Behavior:**
+
+1. Trim/dedupe `recipient_ids` (empty strings ignored).
+2. Reject if count exceeds `LINE_BATCH_MAX_RECIPIENTS` (default **10000**).
+3. Chunk into groups of **500** (LINE multicast limit).
+4. Send chunks sequentially with a minimum interval (`LINE_BATCH_MIN_INTERVAL_MS`, default **250**).
+5. On HTTP `429` from LINE: retry up to 3 times with exponential backoff (1s / 2s / 4s), then mark that chunk failed and continue.
+6. Return a summary; partial success is possible (`sent` + `failed`).
+
+line-service still does **not** own a recipient database — your app loads LINE user IDs and passes them here.
+
+**Headers (required):** same as single send (`X-Gateway-Secret`, `X-Tenant-ID`, `X-Actor-ID`, `X-Line-Channel-Access-Token`).
+
+**Body:**
+
+```json
+{
+  "recipient_ids": [
+    "Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "Uyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+  ],
+  "text": "Global announcement"
+}
+```
+
+**Success (201):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "total": 2,
+    "sent": 2,
+    "failed": 0,
+    "chunk_count": 1,
+    "failed_recipient_ids": []
+  }
+}
+```
+
+`failed_recipient_ids` is omitted when empty; when present it lists IDs from failed chunks only.
+
+**cURL (direct to service):**
+
+```bash
+curl -X POST http://localhost:8083/api/v1/messages/batch \
+  -H "Content-Type: application/json" \
+  -H "X-Gateway-Secret: hello" \
+  -H "X-Tenant-ID: 00000000-0000-0000-0000-000000000001" \
+  -H "X-Actor-ID: 00000000-0000-0000-0000-000000000002" \
+  -H "X-Line-Channel-Access-Token: YOUR_CHANNEL_ACCESS_TOKEN" \
+  -d '{"recipient_ids":["Uxxxxxxxx","Uyyyyyyyy"],"text":"Hello everyone"}'
+```
+
+**Optional env (line-service):**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LINE_BATCH_MIN_INTERVAL_MS` | `250` | Delay between multicast chunks |
+| `LINE_BATCH_MAX_RECIPIENTS` | `10000` | Max unique IDs per request |
+
+### 3. Add-friend QR code
 
 `GET /api/v1/qr`  
 Via gateway: `GET /comms/line/api/v1/qr`
@@ -215,7 +290,7 @@ curl -H "X-Gateway-Secret: hello" \
   "http://localhost:8083/api/v1/qr?basic_id=@136laxkx&size=300" --output qr.png
 ```
 
-### 3. Inbound webhook
+### 4. Inbound webhook
 
 `POST /api/v1/webhooks`  
 Via gateway: `POST /comms/line/api/v1/webhooks`  
@@ -282,7 +357,8 @@ Treat the webhook URL as **sensitive** (it embeds the channel secret). Use HTTPS
 4. Implement `callback_url` handler if you need inbound messages or `follow` auto-greeting;
    protect it with a token on the query string.
 5. Show the add-friend QR with `GET /api/v1/qr?basic_id=@yourid`.
-6. Use the same `GATEWAY_SECRET` / JWT flow as other `/comms/**` services.
+6. For broadcasts: load your stored LINE user IDs and call `POST /api/v1/messages/batch`.
+7. Use the same `GATEWAY_SECRET` / JWT flow as other `/comms/**` services.
 
 ---
 
@@ -292,7 +368,9 @@ Treat the webhook URL as **sensitive** (it embeds the channel secret). Use HTTPS
 |-----------|------------------|
 | Missing access token header | `400` — `X-Line-Channel-Access-Token header is required` |
 | Invalid / expired LINE token | `400` — `invalid line channel token` |
-| LINE rate limit | `400` — `line rate limit exceeded` |
+| LINE rate limit (single send) | `400` — `line rate limit exceeded` |
+| Batch exceeds max recipients | `400` — `recipient_ids exceeds maximum of N` |
+| Batch chunk still rate-limited after retries | counted in `failed` / `failed_recipient_ids` (HTTP 201 with partial success) |
 | Missing `basic_id` on QR | `400` — `basic_id query parameter is required` |
 | Malformed `basic_id` | `400` — `basic_id must look like @136laxkx` |
 | QR `size` out of range | `400` — `size must be between 64 and 1024` |

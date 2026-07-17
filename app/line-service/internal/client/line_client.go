@@ -26,6 +26,12 @@ type SendMessageInput struct {
 	Text        string
 }
 
+type SendMulticastInput struct {
+	AccessToken  string
+	RecipientIDs []string
+	Text         string
+}
+
 // Event types forwarded to the calling app.
 const (
 	EventTypeMessage  = "message"
@@ -43,6 +49,7 @@ type InboundEvent struct {
 
 type LINEClient interface {
 	SendMessage(ctx context.Context, in SendMessageInput) error
+	SendMulticast(ctx context.Context, in SendMulticastInput) error
 	VerifyWebhook(signature string, body []byte, channelSecret string) error
 	ParseWebhook(body []byte) ([]InboundEvent, error)
 	ForwardEvents(ctx context.Context, callbackURL string, events []InboundEvent) error
@@ -70,17 +77,31 @@ func (c *lineClientImpl) SendMessage(ctx context.Context, in SendMessageInput) e
 			{"type": "text", "text": in.Text},
 		},
 	}
+	return c.postMessaging(ctx, "https://api.line.me/v2/bot/message/push", in.AccessToken, payload)
+}
+
+func (c *lineClientImpl) SendMulticast(ctx context.Context, in SendMulticastInput) error {
+	payload := map[string]interface{}{
+		"to": in.RecipientIDs,
+		"messages": []map[string]string{
+			{"type": "text", "text": in.Text},
+		},
+	}
+	return c.postMessaging(ctx, "https://api.line.me/v2/bot/message/multicast", in.AccessToken, payload)
+}
+
+func (c *lineClientImpl) postMessaging(ctx context.Context, url, accessToken string, payload map[string]interface{}) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("marshal push message: %w", err)
+		return fmt.Errorf("marshal messaging payload: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.line.me/v2/bot/message/push", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+in.AccessToken)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
