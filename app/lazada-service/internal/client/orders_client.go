@@ -36,20 +36,23 @@ func (c *lazadaClientImpl) ListOrders(
 	}
 	offset := (page - 1) * limit
 
-	updateAfter := strings.TrimSpace(updatedFrom)
+	updateAfter := normalizeLazadaDateFilter(updatedFrom, c.country)
 	if updateAfter == "" {
-		updateAfter = time.Now().UTC().Add(-defaultOrderLookback).Format(time.RFC3339)
+		updateAfter = normalizeLazadaDateFilter(
+			time.Now().UTC().Add(-defaultOrderLookback).Format(time.RFC3339),
+			c.country,
+		)
 	}
 
 	params := map[string]string{
-		"app_key":      c.appKey,
-		"access_token": accessToken,
-		"sign_method":  "sha256",
-		"timestamp":    strconv.FormatInt(time.Now().UnixMilli(), 10),
-		"offset":       strconv.Itoa(offset),
-		"limit":        strconv.Itoa(limit),
-		"update_after": updateAfter,
-		"sort_by":      "updated_at",
+		"app_key":        c.appKey,
+		"access_token":   accessToken,
+		"sign_method":    "sha256",
+		"timestamp":      strconv.FormatInt(time.Now().UnixMilli(), 10),
+		"offset":         strconv.Itoa(offset),
+		"limit":          strconv.Itoa(limit),
+		"update_after":   updateAfter,
+		"sort_by":        "updated_at",
 		"sort_direction": "DESC",
 	}
 	params["sign"] = sign(ordersGetPath, params, c.appSecret)
@@ -102,10 +105,26 @@ type ordersGetResponse struct {
 }
 
 type lazadaOrder struct {
-	OrderID   json.Number `json:"order_id"`
-	Price     json.Number `json:"price"`
-	Statuses  []string    `json:"statuses"`
-	CreatedAt string      `json:"created_at"`
+	OrderID            json.Number        `json:"order_id"`
+	Price              json.Number        `json:"price"`
+	Statuses           []string           `json:"statuses"`
+	CreatedAt          string             `json:"created_at"`
+	CustomerFirstName  string             `json:"customer_first_name"`
+	CustomerLastName   string             `json:"customer_last_name"`
+	AddressShipping    lazadaOrderAddress `json:"address_shipping"`
+	AddressBilling     lazadaOrderAddress `json:"address_billing"`
+}
+
+type lazadaOrderAddress struct {
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	Phone     string `json:"phone"`
+	Email     string `json:"email"`
+	Address1  string `json:"address1"`
+	Address2  string `json:"address2"`
+	City      string `json:"city"`
+	PostCode  string `json:"post_code"`
+	Country   string `json:"country"`
 }
 
 func (r *ordersGetResponse) toOrderList(country string) *response.OrderListResponse {
@@ -118,12 +137,21 @@ func (r *ordersGetResponse) toOrderList(country string) *response.OrderListRespo
 	currency := currencyForCountry(country)
 
 	for _, order := range r.Data.Orders {
-		parsedAt := parseLazadaOrderTime(order.CreatedAt)
+		parsedAt := parseLazadaOrderTime(order.CreatedAt, country)
+		shippingAddress := order.AddressShipping
+		if shippingAddress.isEmpty() {
+			shippingAddress = order.AddressBilling
+		}
+
 		item := response.OrderResponse{
 			ExternalOrderID: order.OrderID.String(),
 			Status:          formatOrderStatus(order.Statuses),
 			TotalAmount:     order.Price.String(),
 			Currency:        currency,
+			CustomerName:    formatCustomerName(order.CustomerFirstName, order.CustomerLastName, shippingAddress),
+			CustomerEmail:   strings.TrimSpace(shippingAddress.Email),
+			CustomerPhone:   firstNonEmpty(strings.TrimSpace(shippingAddress.Phone), strings.TrimSpace(order.AddressBilling.Phone)),
+			CustomerAddress: formatShippingAddress(shippingAddress),
 		}
 		if !parsedAt.IsZero() {
 			item.OrderedAt = &parsedAt
@@ -135,6 +163,52 @@ func (r *ordersGetResponse) toOrderList(country string) *response.OrderListRespo
 		Items: items,
 		Total: int(total),
 	}
+}
+
+func (a lazadaOrderAddress) isEmpty() bool {
+	return strings.TrimSpace(a.FirstName) == "" &&
+		strings.TrimSpace(a.LastName) == "" &&
+		strings.TrimSpace(a.Address1) == "" &&
+		strings.TrimSpace(a.City) == ""
+}
+
+func formatCustomerName(firstName, lastName string, address lazadaOrderAddress) string {
+	name := strings.TrimSpace(strings.Join([]string{
+		strings.TrimSpace(firstName),
+		strings.TrimSpace(lastName),
+	}, " "))
+	if name != "" {
+		return name
+	}
+	return strings.TrimSpace(strings.Join([]string{
+		strings.TrimSpace(address.FirstName),
+		strings.TrimSpace(address.LastName),
+	}, " "))
+}
+
+func formatShippingAddress(address lazadaOrderAddress) string {
+	parts := make([]string, 0, 5)
+	for _, part := range []string{
+		strings.TrimSpace(address.Address1),
+		strings.TrimSpace(address.Address2),
+		strings.TrimSpace(address.City),
+		strings.TrimSpace(address.PostCode),
+		strings.TrimSpace(address.Country),
+	} {
+		if part != "" {
+			parts = append(parts, part)
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func formatOrderStatus(statuses []string) string {
@@ -150,13 +224,51 @@ func formatOrderStatus(statuses []string) string {
 	return strings.Join(parts, ",")
 }
 
-func parseLazadaOrderTime(raw string) time.Time {
+func timezoneForCountry(country string) *time.Location {
+	switch strings.ToLower(strings.TrimSpace(country)) {
+	case "th", "id", "vn":
+		return time.FixedZone("UTC+7", 7*3600)
+	case "sg", "my", "ph":
+		return time.FixedZone("UTC+8", 8*3600)
+	default:
+		return time.UTC
+	}
+}
+
+func normalizeLazadaDateFilter(raw, country string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+
+	loc := timezoneForCountry(country)
+	layouts := []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02T15:04:05Z07:00",
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05",
+	}
+	for _, layout := range layouts {
+		if parsed, err := time.Parse(layout, raw); err == nil {
+			return parsed.In(loc).Format("2006-01-02T15:04:05-07:00")
+		}
+	}
+	if parsed, err := time.ParseInLocation("2006-01-02 15:04:05", raw, loc); err == nil {
+		return parsed.Format("2006-01-02T15:04:05-07:00")
+	}
+	return raw
+}
+
+func parseLazadaOrderTime(raw, country string) time.Time {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return time.Time{}
 	}
 
+	loc := timezoneForCountry(country)
 	layouts := []string{
+		time.RFC3339Nano,
 		time.RFC3339,
 		"2006-01-02T15:04:05Z07:00",
 		"2006-01-02 15:04:05",
@@ -166,6 +278,9 @@ func parseLazadaOrderTime(raw string) time.Time {
 		if parsed, err := time.Parse(layout, raw); err == nil {
 			return parsed.UTC()
 		}
+	}
+	if parsed, err := time.ParseInLocation("2006-01-02 15:04:05", raw, loc); err == nil {
+		return parsed.UTC()
 	}
 	return time.Time{}
 }
