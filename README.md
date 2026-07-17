@@ -9,9 +9,9 @@ CORS, and a shared gateway secret.
 
 | Capability | Description |
 |------------|-------------|
-| **Outbound messaging** | Send text via LINE using caller-supplied channel access tokens. |
-| **Channel / store connections** | Facebook (DB) and Lazada OAuth; LINE credentials stay in calling apps. |
-| **Inbound webhooks** | Verify vendor signatures; LINE optionally forwards parsed events to your callback URL. |
+| **Outbound messaging** | Send text via LINE / Telegram using caller-supplied tokens. |
+| **Channel / store connections** | Facebook (DB) and Lazada OAuth; LINE/Telegram credentials stay in calling apps. |
+| **Inbound webhooks** | Verify vendor signatures; optionally forward parsed events to your callback URL. |
 | **Marketplace setup** | Lazada seller OAuth and store connection (Laco Invoice). |
 
 ### Services
@@ -22,6 +22,7 @@ CORS, and a shared gateway secret.
 | `facebook-service` | `8081` | Meta Graph API ([setup](app/facebook-service/SETUP.md)) |
 | `line-service` | `8083` | LINE Messaging API proxy ([integration](app/line-service/INTEGRATION.md)) |
 | `lazada-service` | `8084` | Lazada Open Platform store connect ([setup](app/lazada-service/SETUP.md)) |
+| `telegram-service` | `8087` | Telegram Bot API proxy ([integration](app/telegram-service/INTEGRATION.md)) |
 
 Each service is **independently deployable** (own `cmd/main.go`, config, Dockerfile).
 
@@ -32,9 +33,9 @@ Clients / vendors
         ↓
 Spring Cloud Gateway (:8080)   JWT + X-Gateway-Secret
         ↓
-facebook / line / lazada services (:8081 / :8083 / :8084)
+facebook / line / lazada / telegram services
         ↓
-Vendor APIs (Meta, LINE, Lazada)
+Vendor APIs (Meta, LINE, Lazada, Telegram)
 ```
 
 Public REST paths:
@@ -44,6 +45,7 @@ Public REST paths:
 | `/comms/facebook/**` | facebook-service |
 | `/comms/line/**` | line-service |
 | `/comms/lazada/**` | lazada-service |
+| `/comms/telegram/**` | telegram-service |
 
 Within each Go service:
 
@@ -77,6 +79,7 @@ docker compose up postgres -d
 
 # terminals — platform services
 go run ./app/line-service/cmd/main.go
+go run ./app/telegram-service/cmd/main.go
 go run ./app/lazada-service/cmd/main.go
 
 # gateway
@@ -87,6 +90,7 @@ Health checks (via gateway, public):
 
 ```
 GET http://localhost:8080/comms/line/api/v1/healthz
+GET http://localhost:8080/comms/telegram/api/v1/healthz
 GET http://localhost:8080/comms/lazada/api/v1/healthz
 ```
 

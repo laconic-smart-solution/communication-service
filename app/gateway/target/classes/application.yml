@@ -50,6 +50,13 @@ spring:
           filters:
             - RewritePath=/comms/tiktok/(?<segment>.*), /${segment}
 
+        - id: comms-telegram
+          uri: ${TELEGRAM_SERVICE_URI:http://localhost:8087}
+          predicates:
+            - Path=/comms/telegram/**
+          filters:
+            - RewritePath=/comms/telegram/(?<segment>.*), /${segment}
+
 management:
   endpoints:
     web:
