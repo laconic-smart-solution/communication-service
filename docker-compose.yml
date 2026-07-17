@@ -117,6 +117,20 @@ services:
     ports:
       - "8087:8087"
 
+  viber-service:
+    build:
+      context: .
+      dockerfile: app/viber-service/Dockerfile
+    container_name: comms-viber-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      VIBER_SERVICE_PORT: "8088"
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
+    ports:
+      - "8088:8088"
+
   gateway:
     build:
       context: app/gateway
@@ -135,6 +149,7 @@ services:
       SHOPEE_SERVICE_URI: http://shopee-service:8085
       TIKTOK_SERVICE_URI: http://tiktok-service:8086
       TELEGRAM_SERVICE_URI: http://telegram-service:8087
+      VIBER_SERVICE_URI: http://viber-service:8088
       GATEWAY_CORS_ALLOWED_ORIGINS: ${GATEWAY_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     ports:
       - "8099:8099"
@@ -150,6 +165,8 @@ services:
       tiktok-service:
         condition: service_started
       telegram-service:
+        condition: service_started
+      viber-service:
         condition: service_started
 
 volumes:
