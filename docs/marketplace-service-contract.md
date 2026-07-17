@@ -99,9 +99,38 @@ Base path: `/api/v1/orders`
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/?access_token=&seller_id=&updated_from=` | Fetch orders using caller-supplied access token |
+| GET | `/?access_token=&seller_id=&page=&limit=&updated_from=` | Fetch orders using caller-supplied access token |
 
 laco-invoice reads `access_token` from `store_marketplace_connections` and passes it to the marketplace service.
+
+### Query parameters (list)
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `access_token` | Yes | OAuth access token from laco-invoice |
+| `seller_id` | No | Seller ID (Lazada) |
+| `page` | No | Page number (default `1`) |
+| `limit` | No | Page size (default `20`, max `100`) |
+| `updated_from` | No | ISO8601 lower bound for order updates; Lazada maps to `update_after`. When omitted, defaults to 90 days ago |
+
+### Order list response (`data`)
+
+```json
+{
+  "items": [
+    {
+      "external_order_id": "123456789",
+      "status": "shipped,pending",
+      "total_amount": "199.00",
+      "currency": "THB",
+      "ordered_at": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "total": 42
+}
+```
+
+Lazada implements `/orders/get` against the regional REST API. Shopee and TikTok return the same envelope; vendor calls may return empty lists until implemented.
 
 ## Products API
 

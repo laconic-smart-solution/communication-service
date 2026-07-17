@@ -46,6 +46,7 @@ type LazadaClient interface {
 	RefreshToken(ctx context.Context, refreshToken string) (*TokenPair, error)
 	ListProducts(ctx context.Context, accessToken string, page, limit int, search string) (*response.ProductListResponse, error)
 	GetProduct(ctx context.Context, accessToken, externalProductID, sku string) (*response.ProductDetailResponse, error)
+	ListOrders(ctx context.Context, accessToken string, page, limit int, updatedFrom string) (*response.OrderListResponse, error)
 }
 
 type lazadaClientImpl struct {

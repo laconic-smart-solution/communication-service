@@ -29,9 +29,9 @@ func (h *OrderHandler) List(c *fiber.Ctx) error {
 		return utils.BadRequest(c, err)
 	}
 
-	items, err := h.svc.List(c.Context(), req.AccessToken, req.SellerID, req.UpdatedFrom)
+	res, err := h.svc.List(c.Context(), req)
 	if err != nil {
 		return utils.BadRequest(c, err)
 	}
-	return utils.OK(c, items)
+	return utils.OK(c, res)
 }
