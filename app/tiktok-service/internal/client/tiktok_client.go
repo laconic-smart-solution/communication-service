@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/laconic-smart-solution/communication-service/app/tiktok-service/internal/config"
+	"github.com/laconic-smart-solution/communication-service/app/tiktok-service/internal/response"
 )
 
 const tokenGetPath = "/api/v2/token/get"
@@ -20,7 +21,14 @@ var (
 	ErrInvalidCode  = errors.New("invalid tiktok authorization code")
 	ErrInvalidToken = errors.New("invalid tiktok token")
 	ErrRateLimited  = errors.New("tiktok api rate limited")
+	ErrNotFound     = errors.New("tiktok resource not found")
 )
+
+// Credentials are TikTok Shop app credentials supplied per request by the caller.
+type Credentials struct {
+	AppKey    string
+	AppSecret string
+}
 
 type TokenPair struct {
 	AccessToken      string
@@ -33,17 +41,28 @@ type TokenPair struct {
 	ShortCode        string
 }
 
+type AuthorizedShop struct {
+	ID     string
+	Name   string
+	Region string
+	Cipher string
+}
+
 type TikTokClient interface {
-	BuildAuthorizeURL(state string) string
-	ExchangeToken(ctx context.Context, code string) (*TokenPair, error)
-	RefreshToken(ctx context.Context, refreshToken string) (*TokenPair, error)
+	BuildAuthorizeURL(creds Credentials, state string) string
+	ExchangeToken(ctx context.Context, creds Credentials, code string) (*TokenPair, error)
+	RefreshToken(ctx context.Context, creds Credentials, refreshToken string) (*TokenPair, error)
+	ListAuthorizedShops(ctx context.Context, creds Credentials, accessToken string) ([]AuthorizedShop, error)
+	ResolveShopCipher(ctx context.Context, creds Credentials, accessToken, preferredShopID string) (*AuthorizedShop, error)
+	ListProducts(ctx context.Context, creds Credentials, accessToken, shopID string, page, limit int, search string) (*response.ProductListResponse, error)
+	GetProduct(ctx context.Context, creds Credentials, accessToken, shopID, externalProductID string) (*response.ProductDetailResponse, error)
+	ListOrders(ctx context.Context, creds Credentials, accessToken, shopID string, page, limit int, updatedFrom string) (*response.OrderListResponse, error)
 }
 
 type tiktokClientImpl struct {
-	appKey      string
-	appSecret   string
 	redirectURI string
 	authHost    string
+	apiHost     string
 	httpClient  *http.Client
 }
 
@@ -54,35 +73,34 @@ func NewTikTokClient(cfg *config.Config, timeoutSec int) TikTokClient {
 		timeoutSec = 15
 	}
 	return &tiktokClientImpl{
-		appKey:      cfg.TikTokAppKey,
-		appSecret:   cfg.TikTokAppSecret,
 		redirectURI: cfg.TikTokRedirectURI,
 		authHost:    strings.TrimRight(cfg.TikTokAuthHost, "/"),
+		apiHost:     strings.TrimRight(cfg.TikTokAPIHost, "/"),
 		httpClient:  &http.Client{Timeout: time.Duration(timeoutSec) * time.Second},
 	}
 }
 
-func (c *tiktokClientImpl) BuildAuthorizeURL(state string) string {
+func (c *tiktokClientImpl) BuildAuthorizeURL(creds Credentials, state string) string {
 	q := url.Values{}
-	q.Set("app_key", c.appKey)
+	q.Set("app_key", creds.AppKey)
 	q.Set("state", state)
 	return "https://services.tiktokshop.com/open/authorize?" + q.Encode()
 }
 
-func (c *tiktokClientImpl) ExchangeToken(ctx context.Context, code string) (*TokenPair, error) {
+func (c *tiktokClientImpl) ExchangeToken(ctx context.Context, creds Credentials, code string) (*TokenPair, error) {
 	body := map[string]string{
-		"app_key":    c.appKey,
-		"app_secret": c.appSecret,
+		"app_key":    creds.AppKey,
+		"app_secret": creds.AppSecret,
 		"auth_code":  code,
 		"grant_type": "authorized_code",
 	}
 	return c.doTokenRequest(ctx, body)
 }
 
-func (c *tiktokClientImpl) RefreshToken(ctx context.Context, refreshToken string) (*TokenPair, error) {
+func (c *tiktokClientImpl) RefreshToken(ctx context.Context, creds Credentials, refreshToken string) (*TokenPair, error) {
 	body := map[string]string{
-		"app_key":       c.appKey,
-		"app_secret":    c.appSecret,
+		"app_key":       creds.AppKey,
+		"app_secret":    creds.AppSecret,
 		"refresh_token": refreshToken,
 		"grant_type":    "refresh_token",
 	}

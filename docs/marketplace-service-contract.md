@@ -24,8 +24,10 @@ Gateway rewrites `/comms/{platform}/{segment}` → `/{segment}`.
 | `X-Actor-ID` | Connect / refresh | Per-user actor UUID |
 | `X-Lazada-App-Key` | Lazada endpoints | Lazada Open Platform app key (caller-owned; not stored in lazada-service) |
 | `X-Lazada-App-Secret` | Lazada endpoints | Lazada Open Platform app secret (caller-owned) |
+| `X-TikTok-App-Key` | TikTok endpoints | TikTok Shop Partner app key (caller-owned; not stored in tiktok-service) |
+| `X-TikTok-App-Secret` | TikTok endpoints | TikTok Shop Partner app secret (caller-owned) |
 
-Seller OAuth `access_token` is still passed as a query/body parameter. Lazada app credentials follow the same caller-owned pattern as messaging services (`X-Line-Channel-Access-Token`, `X-Telegram-Bot-Token`).
+Seller OAuth `access_token` is still passed as a query/body parameter. Lazada/TikTok app credentials follow the same caller-owned pattern as messaging services (`X-Line-Channel-Access-Token`, `X-Telegram-Bot-Token`).
 
 ## Standard store connection API
 
@@ -156,7 +158,11 @@ When Lazada order-item enrichment succeeds:
 - order-level `currency` is taken from line-item `currency` (ISO 4217); else falls back to mapping `LAZADA_COUNTRY` (e.g. `th` → `THB`)
 - order-level `external_customer_id` is taken from line-item `buyer_id` when present
 
-Lazada implements `/orders/get` for headers and enriches each page via `/orders/items/get` (fallback `/order/items/get`). Shopee and TikTok return the same envelope with empty `items` arrays until vendor order-item APIs are implemented.
+Lazada implements `/orders/get` for headers and enriches each page via `/orders/items/get` (fallback `/order/items/get`).
+
+TikTok implements `POST /order/202309/orders/search` then `GET /order/202309/orders?ids=` for details (line items + recipient address + `user_id` as `external_customer_id`). Currency falls back from authorized shop region when payment currency is absent.
+
+Shopee returns the same envelope with empty `items` arrays until vendor order-item APIs are implemented.
 
 ## Products API
 
@@ -196,7 +202,7 @@ Base path: `/api/v1/products`
 }
 ```
 
-Lazada implements `/products/get` against the regional REST API. Shopee and TikTok return the same envelope; vendor calls may return empty lists until implemented.
+Lazada implements `/products/get` against the regional REST API. TikTok implements `POST /product/202309/products/search`. Shopee returns the same envelope; vendor calls may return empty lists until implemented.
 
 ### Product detail response (`data`)
 
@@ -222,7 +228,7 @@ Lazada implements `/products/get` against the regional REST API. Shopee and TikT
 }
 ```
 
-Lazada implements `/product/item/get`. Shopee and TikTok detail endpoints return `404` until implemented.
+Lazada implements `/product/item/get`. TikTok implements `GET /product/202309/products/{id}`. Shopee detail endpoints return `404` until implemented.
 
 ## Adding a new marketplace
 

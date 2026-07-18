@@ -95,8 +95,6 @@ services:
     environment:
       TIKTOK_SERVICE_PORT: "8086"
       GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
-      TIKTOK_APP_KEY: ${TIKTOK_APP_KEY:-}
-      TIKTOK_APP_SECRET: ${TIKTOK_APP_SECRET:-}
       TIKTOK_REDIRECT_URI: ${TIKTOK_REDIRECT_URI:-http://localhost:5173/stores/tiktok/callback}
     ports:
       - "8086:8086"

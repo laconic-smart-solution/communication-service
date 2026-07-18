@@ -30,17 +30,14 @@ func main() {
 	if cfg.GatewaySharedSecret == "" {
 		log.Fatal("GATEWAY_SECRET is required")
 	}
-	if cfg.TikTokAppKey == "" || cfg.TikTokAppSecret == "" {
-		log.Fatal("TIKTOK_APP_KEY and TIKTOK_APP_SECRET are required")
-	}
 	if cfg.TikTokRedirectURI == "" {
 		log.Fatal("TIKTOK_REDIRECT_URI is required")
 	}
 
 	tiktokClient := client.NewTikTokClient(cfg, 15)
 	storeSvc := service.NewStoreService(log, tiktokClient)
-	orderSvc := service.NewOrderService(log)
-	productSvc := service.NewProductService(log)
+	orderSvc := service.NewOrderService(log, tiktokClient)
+	productSvc := service.NewProductService(log, tiktokClient)
 
 	handlers := routes.Handlers{
 		Store:   handler.NewStoreHandler(storeSvc),
@@ -50,8 +47,8 @@ func main() {
 
 	app := fiber.New(fiber.Config{
 		AppName:      "tiktok-service",
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	})
 
@@ -59,7 +56,7 @@ func main() {
 	app.Use(fiberlogger.New())
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: cfg.CORSAllowOrigins,
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Tenant-ID, X-Actor-ID, X-User-ID, X-Gateway-Secret",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Tenant-ID, X-Actor-ID, X-User-ID, X-Gateway-Secret, X-TikTok-App-Key, X-TikTok-App-Secret",
 		AllowMethods: strings.Join([]string{
 			fiber.MethodGet, fiber.MethodPost, fiber.MethodPut,
 			fiber.MethodPatch, fiber.MethodDelete, fiber.MethodOptions,

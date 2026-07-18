@@ -17,14 +17,24 @@ func NewStoreHandler(svc service.StoreService) *StoreHandler {
 }
 
 func (h *StoreHandler) AuthorizeURL(c *fiber.Ctx) error {
+	creds, err := requireTikTokCredentials(c)
+	if err != nil {
+		return badRequestCredentials(c, err)
+	}
+
 	var req request.AuthorizeURLRequest
 	if err := c.QueryParser(&req); err != nil {
 		return utils.BadRequest(c, err)
 	}
-	return utils.OK(c, h.svc.AuthorizeURL(req.State))
+	return utils.OK(c, h.svc.AuthorizeURL(creds, req.State))
 }
 
 func (h *StoreHandler) Connect(c *fiber.Ctx) error {
+	creds, err := requireTikTokCredentials(c)
+	if err != nil {
+		return badRequestCredentials(c, err)
+	}
+
 	tenantID, err := utils.RequireTenantID(c)
 	if err != nil {
 		return utils.BadRequest(c, err)
@@ -41,7 +51,7 @@ func (h *StoreHandler) Connect(c *fiber.Ctx) error {
 		return utils.BadRequest(c, err)
 	}
 
-	res, err := h.svc.Connect(c.Context(), tenantID, req, utils.ActorID(c))
+	res, err := h.svc.Connect(c.Context(), creds, tenantID, req, utils.ActorID(c))
 	if err != nil {
 		return utils.BadRequest(c, err)
 	}
@@ -49,6 +59,11 @@ func (h *StoreHandler) Connect(c *fiber.Ctx) error {
 }
 
 func (h *StoreHandler) Refresh(c *fiber.Ctx) error {
+	creds, err := requireTikTokCredentials(c)
+	if err != nil {
+		return badRequestCredentials(c, err)
+	}
+
 	if _, err := utils.RequireTenantID(c); err != nil {
 		return utils.BadRequest(c, err)
 	}
@@ -64,7 +79,7 @@ func (h *StoreHandler) Refresh(c *fiber.Ctx) error {
 		return utils.BadRequest(c, err)
 	}
 
-	res, err := h.svc.Refresh(c.Context(), req)
+	res, err := h.svc.Refresh(c.Context(), creds, req)
 	if err != nil {
 		return utils.BadRequest(c, err)
 	}

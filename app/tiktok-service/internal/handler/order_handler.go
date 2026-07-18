@@ -17,6 +17,11 @@ func NewOrderHandler(svc service.OrderService) *OrderHandler {
 }
 
 func (h *OrderHandler) List(c *fiber.Ctx) error {
+	creds, err := requireTikTokCredentials(c)
+	if err != nil {
+		return badRequestCredentials(c, err)
+	}
+
 	if _, err := utils.RequireTenantID(c); err != nil {
 		return utils.BadRequest(c, err)
 	}
@@ -29,9 +34,9 @@ func (h *OrderHandler) List(c *fiber.Ctx) error {
 		return utils.BadRequest(c, err)
 	}
 
-	items, err := h.svc.List(c.Context(), req.AccessToken, req.SellerID, req.UpdatedFrom)
+	res, err := h.svc.List(c.Context(), creds, req)
 	if err != nil {
 		return utils.BadRequest(c, err)
 	}
-	return utils.OK(c, items)
+	return utils.OK(c, res)
 }
