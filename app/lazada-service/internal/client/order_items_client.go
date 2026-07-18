@@ -185,6 +185,7 @@ type lazadaOrderItem struct {
 	ItemPrice flexibleString `json:"item_price"`
 	PaidPrice flexibleString `json:"paid_price"`
 	Currency  flexibleString `json:"currency"`
+	BuyerID   flexibleString `json:"buyer_id"`
 }
 
 type multiOrderItemsEntry struct {
@@ -275,6 +276,7 @@ func groupLazadaOrderItems(rawItems []lazadaOrderItem) []response.OrderItemRespo
 		price       *big.Rat
 		quantity    int
 		currency    string
+		buyerID     string
 	}
 
 	groups := make(map[lineItemGroupKey]*accumulator)
@@ -284,6 +286,7 @@ func groupLazadaOrderItems(rawItems []lazadaOrderItem) []response.OrderItemRespo
 		sku := firstNonEmpty(strings.TrimSpace(item.SKU), strings.TrimSpace(item.ShopSKU))
 		name := strings.TrimSpace(item.Name)
 		currency := strings.ToUpper(strings.TrimSpace(item.Currency.String()))
+		buyerID := strings.TrimSpace(item.BuyerID.String())
 		priceStr := firstNonEmpty(
 			strings.TrimSpace(item.ItemPrice.String()),
 			strings.TrimSpace(item.PaidPrice.String()),
@@ -304,11 +307,17 @@ func groupLazadaOrderItems(rawItems []lazadaOrderItem) []response.OrderItemRespo
 				price:       priceRat,
 				quantity:    0,
 				currency:    currency,
+				buyerID:     buyerID,
 			}
 			groups[key] = acc
 			orderKeys = append(orderKeys, key)
-		} else if acc.currency == "" && currency != "" {
-			acc.currency = currency
+		} else {
+			if acc.currency == "" && currency != "" {
+				acc.currency = currency
+			}
+			if acc.buyerID == "" && buyerID != "" {
+				acc.buyerID = buyerID
+			}
 		}
 		acc.quantity++
 	}
@@ -325,6 +334,7 @@ func groupLazadaOrderItems(rawItems []lazadaOrderItem) []response.OrderItemRespo
 			Quantity:    acc.quantity,
 			LineTotal:   formatRatAmount(lineTotal),
 			Currency:    acc.currency,
+			BuyerID:     acc.buyerID,
 		})
 	}
 	return items

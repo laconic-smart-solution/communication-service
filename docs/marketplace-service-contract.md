@@ -128,13 +128,20 @@ laco-invoice reads `access_token` from `store_marketplace_connections` and passe
       "total_amount": "199.00",
       "currency": "THB",
       "ordered_at": "2024-01-15T10:30:00Z",
+      "customer_name": "Jane Doe",
+      "customer_email": "jane@example.com",
+      "customer_phone": "+66123456789",
+      "customer_address": "123 Main St, Bangkok, Thailand",
+      "external_customer_id": "buyer-123",
       "items": [
         {
           "sku": "SKU-001",
           "product_name": "Sample Product",
           "price": "99.50",
           "quantity": 2,
-          "line_total": "199.00"
+          "line_total": "199.00",
+          "currency": "THB",
+          "buyer_id": "buyer-123"
         }
       ]
     }
@@ -143,9 +150,11 @@ laco-invoice reads `access_token` from `store_marketplace_connections` and passe
 }
 ```
 
-Each order includes nested `items` (line items). Fields: `sku`, `product_name`, `price`, `quantity`, `line_total`, optional `currency`.
+Each order includes nested `items` (line items). Fields: `sku`, `product_name`, `price`, `quantity`, `line_total`, optional `currency`, optional `buyer_id`.
 
-When Lazada order-item enrichment succeeds, order-level `currency` is taken from the line-item `currency` field (ISO 4217). If items are missing currency, lazada-service falls back to mapping `LAZADA_COUNTRY` (e.g. `th` → `THB`).
+When Lazada order-item enrichment succeeds:
+- order-level `currency` is taken from line-item `currency` (ISO 4217); else falls back to mapping `LAZADA_COUNTRY` (e.g. `th` → `THB`)
+- order-level `external_customer_id` is taken from line-item `buyer_id` when present
 
 Lazada implements `/orders/get` for headers and enriches each page via `/orders/items/get` (fallback `/order/items/get`). Shopee and TikTok return the same envelope with empty `items` arrays until vendor order-item APIs are implemented.
 

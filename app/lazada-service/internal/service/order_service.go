@@ -107,6 +107,9 @@ func (s *orderServiceImpl) enrichOrderItems(
 			if currency := currencyFromOrderItems(items); currency != "" {
 				result.Items[i].Currency = currency
 			}
+			if buyerID := buyerIDFromOrderItems(items); buyerID != "" {
+				result.Items[i].ExternalCustomerID = buyerID
+			}
 		}
 	}
 
@@ -122,6 +125,15 @@ func currencyFromOrderItems(items []response.OrderItemResponse) string {
 	for _, item := range items {
 		if currency := strings.ToUpper(strings.TrimSpace(item.Currency)); currency != "" {
 			return currency
+		}
+	}
+	return ""
+}
+
+func buyerIDFromOrderItems(items []response.OrderItemResponse) string {
+	for _, item := range items {
+		if buyerID := strings.TrimSpace(item.BuyerID); buyerID != "" {
+			return buyerID
 		}
 	}
 	return ""
