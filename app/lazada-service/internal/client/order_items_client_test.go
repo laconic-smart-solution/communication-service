@@ -9,8 +9,8 @@ func TestParseOrderItemsGetBody_ArrayData(t *testing.T) {
 	body := []byte(`{
 		"code": "0",
 		"data": [
-			{"sku":"SKU-1","name":"Widget","item_price":"100.50","paid_price":"100.50"},
-			{"sku":"SKU-1","name":"Widget","item_price":100.5,"paid_price":100.5}
+			{"sku":"SKU-1","name":"Widget","item_price":"100.50","paid_price":"100.50","currency":"THB"},
+			{"sku":"SKU-1","name":"Widget","item_price":100.5,"paid_price":100.5,"currency":"THB"}
 		]
 	}`)
 	items, err := parseOrderItemsGetBody(body)
@@ -26,6 +26,9 @@ func TestParseOrderItemsGetBody_ArrayData(t *testing.T) {
 	}
 	if grouped[0].SKU != "SKU-1" {
 		t.Fatalf("sku = %q", grouped[0].SKU)
+	}
+	if grouped[0].Currency != "THB" {
+		t.Fatalf("currency = %q", grouped[0].Currency)
 	}
 }
 

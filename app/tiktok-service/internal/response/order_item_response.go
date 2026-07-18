@@ -6,4 +6,5 @@ type OrderItemResponse struct {
 	Price       string `json:"price"`
 	Quantity    int    `json:"quantity"`
 	LineTotal   string `json:"line_total"`
+	Currency    string `json:"currency,omitempty"`
 }

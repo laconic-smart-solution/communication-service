@@ -143,7 +143,9 @@ laco-invoice reads `access_token` from `store_marketplace_connections` and passe
 }
 ```
 
-Each order includes nested `items` (line items). Fields: `sku`, `product_name`, `price`, `quantity`, `line_total`.
+Each order includes nested `items` (line items). Fields: `sku`, `product_name`, `price`, `quantity`, `line_total`, optional `currency`.
+
+When Lazada order-item enrichment succeeds, order-level `currency` is taken from the line-item `currency` field (ISO 4217). If items are missing currency, lazada-service falls back to mapping `LAZADA_COUNTRY` (e.g. `th` → `THB`).
 
 Lazada implements `/orders/get` for headers and enriches each page via `/orders/items/get` (fallback `/order/items/get`). Shopee and TikTok return the same envelope with empty `items` arrays until vendor order-item APIs are implemented.
 

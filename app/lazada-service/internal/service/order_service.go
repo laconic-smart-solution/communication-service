@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 
@@ -103,6 +104,9 @@ func (s *orderServiceImpl) enrichOrderItems(
 		result.Items[i].Items = items
 		if len(items) > 0 {
 			enriched++
+			if currency := currencyFromOrderItems(items); currency != "" {
+				result.Items[i].Currency = currency
+			}
 		}
 	}
 
@@ -112,4 +116,13 @@ func (s *orderServiceImpl) enrichOrderItems(
 	}).Info("order line-item enrichment complete")
 
 	return nil
+}
+
+func currencyFromOrderItems(items []response.OrderItemResponse) string {
+	for _, item := range items {
+		if currency := strings.ToUpper(strings.TrimSpace(item.Currency)); currency != "" {
+			return currency
+		}
+	}
+	return ""
 }
