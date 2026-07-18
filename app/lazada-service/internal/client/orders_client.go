@@ -237,6 +237,23 @@ func timezoneForCountry(country string) *time.Location {
 	}
 }
 
+// Lazada frequently returns ISO-8601 with a numeric offset and no colon (+0700),
+// which RFC3339 rejects. Keep both colon and no-colon forms.
+var lazadaTimeLayouts = []string{
+	time.RFC3339Nano,
+	time.RFC3339,
+	"2006-01-02T15:04:05.999999999Z07:00",
+	"2006-01-02T15:04:05.999999999Z0700",
+	"2006-01-02T15:04:05Z07:00",
+	"2006-01-02T15:04:05Z0700",
+	"2006-01-02 15:04:05.999999999 Z07:00",
+	"2006-01-02 15:04:05.999999999 Z0700",
+	"2006-01-02 15:04:05 Z07:00",
+	"2006-01-02 15:04:05 Z0700",
+	"2006-01-02 15:04:05",
+	"2006-01-02T15:04:05",
+}
+
 func normalizeLazadaDateFilter(raw, country string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -244,20 +261,8 @@ func normalizeLazadaDateFilter(raw, country string) string {
 	}
 
 	loc := timezoneForCountry(country)
-	layouts := []string{
-		time.RFC3339Nano,
-		time.RFC3339,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02T15:04:05",
-	}
-	for _, layout := range layouts {
-		if parsed, err := time.Parse(layout, raw); err == nil {
-			return parsed.In(loc).Format("2006-01-02T15:04:05-07:00")
-		}
-	}
-	if parsed, err := time.ParseInLocation("2006-01-02 15:04:05", raw, loc); err == nil {
-		return parsed.Format("2006-01-02T15:04:05-07:00")
+	if parsed := parseLazadaOrderTime(raw, country); !parsed.IsZero() {
+		return parsed.In(loc).Format("2006-01-02T15:04:05-07:00")
 	}
 	return raw
 }
@@ -268,21 +273,29 @@ func parseLazadaOrderTime(raw, country string) time.Time {
 		return time.Time{}
 	}
 
-	loc := timezoneForCountry(country)
-	layouts := []string{
-		time.RFC3339Nano,
-		time.RFC3339,
-		"2006-01-02T15:04:05Z07:00",
-		"2006-01-02 15:04:05",
-		"2006-01-02T15:04:05",
-	}
-	for _, layout := range layouts {
+	for _, layout := range lazadaTimeLayouts {
 		if parsed, err := time.Parse(layout, raw); err == nil {
 			return parsed.UTC()
 		}
 	}
+
+	loc := timezoneForCountry(country)
 	if parsed, err := time.ParseInLocation("2006-01-02 15:04:05", raw, loc); err == nil {
 		return parsed.UTC()
 	}
+	if parsed, err := time.ParseInLocation("2006-01-02T15:04:05", raw, loc); err == nil {
+		return parsed.UTC()
+	}
+
+	// Some marketplace payloads send unix seconds / milliseconds as a string.
+	if unix, err := strconv.ParseInt(raw, 10, 64); err == nil {
+		if unix > 1_000_000_000_000 {
+			return time.UnixMilli(unix).UTC()
+		}
+		if unix > 1_000_000_000 {
+			return time.Unix(unix, 0).UTC()
+		}
+	}
+
 	return time.Time{}
 }
