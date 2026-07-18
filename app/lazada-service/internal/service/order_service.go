@@ -84,6 +84,7 @@ func (s *orderServiceImpl) enrichOrderItems(
 		itemsByOrder = make(map[string][]response.OrderItemResponse)
 	}
 
+	enriched := 0
 	for i := range result.Items {
 		orderID := result.Items[i].ExternalOrderID
 		items, ok := itemsByOrder[orderID]
@@ -100,7 +101,15 @@ func (s *orderServiceImpl) enrichOrderItems(
 			items = []response.OrderItemResponse{}
 		}
 		result.Items[i].Items = items
+		if len(items) > 0 {
+			enriched++
+		}
 	}
+
+	s.logger.WithFields(logrus.Fields{
+		"orders":   len(result.Items),
+		"enriched": enriched,
+	}).Info("order line-item enrichment complete")
 
 	return nil
 }

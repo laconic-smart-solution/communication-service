@@ -74,15 +74,11 @@ func (c *lazadaClientImpl) GetOrderItems(
 		return nil, err
 	}
 
-	var raw orderItemsGetResponse
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
+	rawItems, err := parseOrderItemsGetBody(body)
+	if err != nil {
+		return nil, err
 	}
-	if raw.Code != "" && raw.Code != "0" {
-		return nil, fmt.Errorf("lazada api error: %s", raw.Message)
-	}
-
-	return groupLazadaOrderItems(raw.Data), nil
+	return groupLazadaOrderItems(rawItems), nil
 }
 
 func (c *lazadaClientImpl) fetchMultipleOrderItems(
@@ -105,23 +101,7 @@ func (c *lazadaClientImpl) fetchMultipleOrderItems(
 		return nil, err
 	}
 
-	var raw ordersItemsGetResponse
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
-	}
-	if raw.Code != "" && raw.Code != "0" {
-		return nil, fmt.Errorf("lazada api error: %s", raw.Message)
-	}
-
-	result := make(map[string][]response.OrderItemResponse, len(raw.Data))
-	for _, entry := range raw.Data {
-		orderID := entry.OrderID.String()
-		if orderID == "" {
-			continue
-		}
-		result[orderID] = groupLazadaOrderItems(entry.OrderItems)
-	}
-	return result, nil
+	return parseOrdersItemsGetBody(body)
 }
 
 func (c *lazadaClientImpl) doLazadaGET(ctx context.Context, apiPath string, params map[string]string) ([]byte, error) {
@@ -153,28 +133,128 @@ func (c *lazadaClientImpl) doLazadaGET(ctx context.Context, apiPath string, para
 	return body, nil
 }
 
-type ordersItemsGetResponse struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Data    []struct {
-		OrderID    json.Number       `json:"order_id"`
-		OrderItems []lazadaOrderItem `json:"order_items"`
-	} `json:"data"`
+// flexibleString accepts JSON strings or numbers (Lazada mixes both).
+type flexibleString string
+
+func (f *flexibleString) UnmarshalJSON(b []byte) error {
+	b = bytesTrimSpace(b)
+	if string(b) == "null" || len(b) == 0 {
+		*f = ""
+		return nil
+	}
+	if b[0] == '"' {
+		var s string
+		if err := json.Unmarshal(b, &s); err != nil {
+			return err
+		}
+		*f = flexibleString(s)
+		return nil
+	}
+	var n json.Number
+	if err := json.Unmarshal(b, &n); err != nil {
+		return err
+	}
+	*f = flexibleString(n.String())
+	return nil
 }
 
-type orderItemsGetResponse struct {
-	Code    string            `json:"code"`
-	Message string            `json:"message"`
-	Data    []lazadaOrderItem `json:"data"`
+func (f flexibleString) String() string {
+	return string(f)
+}
+
+func bytesTrimSpace(b []byte) []byte {
+	return []byte(strings.TrimSpace(string(b)))
+}
+
+type lazadaAPIEnvelope struct {
+	Code    flexibleString  `json:"code"`
+	Message string          `json:"message"`
+	Data    json.RawMessage `json:"data"`
+}
+
+func (e lazadaAPIEnvelope) ok() bool {
+	code := strings.TrimSpace(e.Code.String())
+	return code == "" || code == "0"
 }
 
 type lazadaOrderItem struct {
-	OrderID  json.Number `json:"order_id"`
-	SKU      string      `json:"sku"`
-	ShopSKU  string      `json:"shop_sku"`
-	Name     string      `json:"name"`
-	ItemPrice string     `json:"item_price"`
-	PaidPrice string     `json:"paid_price"`
+	OrderID   flexibleString `json:"order_id"`
+	SKU       string         `json:"sku"`
+	ShopSKU   string         `json:"shop_sku"`
+	Name      string         `json:"name"`
+	ItemPrice flexibleString `json:"item_price"`
+	PaidPrice flexibleString `json:"paid_price"`
+}
+
+type multiOrderItemsEntry struct {
+	OrderID    flexibleString    `json:"order_id"`
+	OrderItems []lazadaOrderItem `json:"order_items"`
+}
+
+func parseOrdersItemsGetBody(body []byte) (map[string][]response.OrderItemResponse, error) {
+	var env lazadaAPIEnvelope
+	if err := json.Unmarshal(body, &env); err != nil {
+		return nil, fmt.Errorf("decode response: %w; body=%s", err, truncateBody(body))
+	}
+	if !env.ok() {
+		return nil, fmt.Errorf("lazada api error: %s", firstNonEmpty(env.Message, env.Code.String()))
+	}
+
+	result := make(map[string][]response.OrderItemResponse)
+	if len(env.Data) == 0 || string(env.Data) == "null" {
+		return result, nil
+	}
+
+	var entries []multiOrderItemsEntry
+	if err := json.Unmarshal(env.Data, &entries); err != nil {
+		return nil, fmt.Errorf("decode orders items data: %w; body=%s", err, truncateBody(body))
+	}
+	for _, entry := range entries {
+		orderID := strings.TrimSpace(entry.OrderID.String())
+		if orderID == "" {
+			continue
+		}
+		result[orderID] = groupLazadaOrderItems(entry.OrderItems)
+	}
+	return result, nil
+}
+
+func parseOrderItemsGetBody(body []byte) ([]lazadaOrderItem, error) {
+	var env lazadaAPIEnvelope
+	if err := json.Unmarshal(body, &env); err != nil {
+		return nil, fmt.Errorf("decode response: %w; body=%s", err, truncateBody(body))
+	}
+	if !env.ok() {
+		return nil, fmt.Errorf("lazada api error: %s", firstNonEmpty(env.Message, env.Code.String()))
+	}
+	if len(env.Data) == 0 || string(env.Data) == "null" {
+		return []lazadaOrderItem{}, nil
+	}
+
+	// Common shape: data is []orderItem
+	var items []lazadaOrderItem
+	if err := json.Unmarshal(env.Data, &items); err == nil {
+		return items, nil
+	}
+
+	// Alternate: data is { order_items: [...] }
+	var wrapped struct {
+		OrderItems []lazadaOrderItem `json:"order_items"`
+	}
+	if err := json.Unmarshal(env.Data, &wrapped); err == nil && len(wrapped.OrderItems) > 0 {
+		return wrapped.OrderItems, nil
+	}
+
+	return nil, fmt.Errorf("decode order items data: unexpected shape; body=%s", truncateBody(body))
+}
+
+func truncateBody(body []byte) string {
+	const max = 500
+	s := strings.TrimSpace(string(body))
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
 }
 
 type lineItemGroupKey struct {
@@ -201,17 +281,20 @@ func groupLazadaOrderItems(rawItems []lazadaOrderItem) []response.OrderItemRespo
 	for _, item := range rawItems {
 		sku := firstNonEmpty(strings.TrimSpace(item.SKU), strings.TrimSpace(item.ShopSKU))
 		name := strings.TrimSpace(item.Name)
-		priceStr := firstNonEmpty(strings.TrimSpace(item.ItemPrice), strings.TrimSpace(item.PaidPrice))
+		priceStr := firstNonEmpty(
+			strings.TrimSpace(item.ItemPrice.String()),
+			strings.TrimSpace(item.PaidPrice.String()),
+		)
+		priceRat := new(big.Rat)
 		if priceStr == "" {
-			priceStr = "0"
+			priceRat.SetInt64(0)
+		} else if _, ok := priceRat.SetString(priceStr); !ok {
+			priceRat.SetInt64(0)
 		}
-		key := lineItemGroupKey{sku: sku, productName: name, price: priceStr}
+		normalizedPrice := formatRatAmount(priceRat)
+		key := lineItemGroupKey{sku: sku, productName: name, price: normalizedPrice}
 		acc, ok := groups[key]
 		if !ok {
-			priceRat := new(big.Rat)
-			if _, ok := priceRat.SetString(priceStr); !ok {
-				priceRat.SetInt64(0)
-			}
 			acc = &accumulator{
 				sku:         sku,
 				productName: name,
