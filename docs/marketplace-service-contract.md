@@ -22,6 +22,10 @@ Gateway rewrites `/comms/{platform}/{segment}` → `/{segment}`.
 | `X-Gateway-Secret` | Yes (service) | Service-to-service secret |
 | `X-Tenant-ID` | Connect / orders | Per-store tenant UUID from laco-invoice |
 | `X-Actor-ID` | Connect / refresh | Per-user actor UUID |
+| `X-Lazada-App-Key` | Lazada endpoints | Lazada Open Platform app key (caller-owned; not stored in lazada-service) |
+| `X-Lazada-App-Secret` | Lazada endpoints | Lazada Open Platform app secret (caller-owned) |
+
+Seller OAuth `access_token` is still passed as a query/body parameter. Lazada app credentials follow the same caller-owned pattern as messaging services (`X-Line-Channel-Access-Token`, `X-Telegram-Bot-Token`).
 
 ## Standard store connection API
 
@@ -123,14 +127,25 @@ laco-invoice reads `access_token` from `store_marketplace_connections` and passe
       "status": "shipped,pending",
       "total_amount": "199.00",
       "currency": "THB",
-      "ordered_at": "2024-01-15T10:30:00Z"
+      "ordered_at": "2024-01-15T10:30:00Z",
+      "items": [
+        {
+          "sku": "SKU-001",
+          "product_name": "Sample Product",
+          "price": "99.50",
+          "quantity": 2,
+          "line_total": "199.00"
+        }
+      ]
     }
   ],
   "total": 42
 }
 ```
 
-Lazada implements `/orders/get` against the regional REST API. Shopee and TikTok return the same envelope; vendor calls may return empty lists until implemented.
+Each order includes nested `items` (line items). Fields: `sku`, `product_name`, `price`, `quantity`, `line_total`.
+
+Lazada implements `/orders/get` for headers and enriches each page via `/orders/items/get` (fallback `/order/items/get`). Shopee and TikTok return the same envelope with empty `items` arrays until vendor order-item APIs are implemented.
 
 ## Products API
 

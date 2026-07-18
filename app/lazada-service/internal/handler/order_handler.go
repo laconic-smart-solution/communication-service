@@ -17,6 +17,11 @@ func NewOrderHandler(svc service.OrderService) *OrderHandler {
 }
 
 func (h *OrderHandler) List(c *fiber.Ctx) error {
+	creds, err := requireLazadaCredentials(c)
+	if err != nil {
+		return badRequestCredentials(c, err)
+	}
+
 	if _, err := utils.RequireTenantID(c); err != nil {
 		return utils.BadRequest(c, err)
 	}
@@ -29,7 +34,7 @@ func (h *OrderHandler) List(c *fiber.Ctx) error {
 		return utils.BadRequest(c, err)
 	}
 
-	res, err := h.svc.List(c.Context(), req)
+	res, err := h.svc.List(c.Context(), creds, req)
 	if err != nil {
 		return utils.BadRequest(c, err)
 	}

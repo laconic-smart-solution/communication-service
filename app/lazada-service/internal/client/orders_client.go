@@ -21,6 +21,7 @@ const (
 
 func (c *lazadaClientImpl) ListOrders(
 	ctx context.Context,
+	creds Credentials,
 	accessToken string,
 	page, limit int,
 	updatedFrom string,
@@ -45,7 +46,7 @@ func (c *lazadaClientImpl) ListOrders(
 	}
 
 	params := map[string]string{
-		"app_key":        c.appKey,
+		"app_key":        creds.AppKey,
 		"access_token":   accessToken,
 		"sign_method":    "sha256",
 		"timestamp":      strconv.FormatInt(time.Now().UnixMilli(), 10),
@@ -55,7 +56,7 @@ func (c *lazadaClientImpl) ListOrders(
 		"sort_by":        "updated_at",
 		"sort_direction": "DESC",
 	}
-	params["sign"] = sign(ordersGetPath, params, c.appSecret)
+	params["sign"] = sign(ordersGetPath, params, creds.AppSecret)
 
 	q := url.Values{}
 	for k, v := range params {
@@ -152,6 +153,7 @@ func (r *ordersGetResponse) toOrderList(country string) *response.OrderListRespo
 			CustomerEmail:   strings.TrimSpace(shippingAddress.Email),
 			CustomerPhone:   firstNonEmpty(strings.TrimSpace(shippingAddress.Phone), strings.TrimSpace(order.AddressBilling.Phone)),
 			CustomerAddress: formatShippingAddress(shippingAddress),
+			Items:           []response.OrderItemResponse{},
 		}
 		if !parsedAt.IsZero() {
 			item.OrderedAt = &parsedAt

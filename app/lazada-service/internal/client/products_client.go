@@ -18,6 +18,7 @@ const productsGetPath = "/products/get"
 
 func (c *lazadaClientImpl) ListProducts(
 	ctx context.Context,
+	creds Credentials,
 	accessToken string,
 	page, limit int,
 	search string,
@@ -34,7 +35,7 @@ func (c *lazadaClientImpl) ListProducts(
 	offset := (page - 1) * limit
 
 	params := map[string]string{
-		"app_key":      c.appKey,
+		"app_key":      creds.AppKey,
 		"access_token": accessToken,
 		"sign_method":  "sha256",
 		"timestamp":    strconv.FormatInt(time.Now().UnixMilli(), 10),
@@ -46,7 +47,7 @@ func (c *lazadaClientImpl) ListProducts(
 	if search != "" {
 		params["search"] = search
 	}
-	params["sign"] = sign(productsGetPath, params, c.appSecret)
+	params["sign"] = sign(productsGetPath, params, creds.AppSecret)
 
 	q := url.Values{}
 	for k, v := range params {

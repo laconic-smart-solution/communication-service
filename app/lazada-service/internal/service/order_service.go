@@ -12,7 +12,7 @@ import (
 )
 
 type OrderService interface {
-	List(ctx context.Context, req request.ListOrdersRequest) (*response.OrderListResponse, error)
+	List(ctx context.Context, creds client.Credentials, req request.ListOrdersRequest) (*response.OrderListResponse, error)
 }
 
 type orderServiceImpl struct {
@@ -26,7 +26,7 @@ func NewOrderService(logger *logrus.Logger, lazadaClient client.LazadaClient) Or
 	return &orderServiceImpl{logger: logger, client: lazadaClient}
 }
 
-func (s *orderServiceImpl) List(ctx context.Context, req request.ListOrdersRequest) (*response.OrderListResponse, error) {
+func (s *orderServiceImpl) List(ctx context.Context, creds client.Credentials, req request.ListOrdersRequest) (*response.OrderListResponse, error) {
 	page := req.Page
 	if page < 1 {
 		page = 1
@@ -39,7 +39,7 @@ func (s *orderServiceImpl) List(ctx context.Context, req request.ListOrdersReque
 		limit = 100
 	}
 
-	result, err := s.client.ListOrders(ctx, req.AccessToken, page, limit, req.UpdatedFrom)
+	result, err := s.client.ListOrders(ctx, creds, req.AccessToken, page, limit, req.UpdatedFrom)
 	if err != nil {
 		if errors.Is(err, client.ErrRateLimited) {
 			return nil, errors.New("lazada rate limit exceeded")
@@ -47,5 +47,60 @@ func (s *orderServiceImpl) List(ctx context.Context, req request.ListOrdersReque
 		s.logger.WithError(err).Error("list orders")
 		return nil, errors.New("failed to list orders")
 	}
+
+	if err := s.enrichOrderItems(ctx, creds, req.AccessToken, result); err != nil {
+		if errors.Is(err, client.ErrRateLimited) {
+			return nil, errors.New("lazada rate limit exceeded")
+		}
+		s.logger.WithError(err).Warn("enrich order items; returning orders without items")
+	}
+
 	return result, nil
+}
+
+func (s *orderServiceImpl) enrichOrderItems(
+	ctx context.Context,
+	creds client.Credentials,
+	accessToken string,
+	result *response.OrderListResponse,
+) error {
+	if result == nil || len(result.Items) == 0 {
+		return nil
+	}
+
+	orderIDs := make([]string, 0, len(result.Items))
+	for _, order := range result.Items {
+		if order.ExternalOrderID != "" {
+			orderIDs = append(orderIDs, order.ExternalOrderID)
+		}
+	}
+	if len(orderIDs) == 0 {
+		return nil
+	}
+
+	itemsByOrder, err := s.client.GetMultipleOrderItems(ctx, creds, accessToken, orderIDs)
+	if err != nil {
+		s.logger.WithError(err).Warn("multi order items fetch failed; falling back to per-order")
+		itemsByOrder = make(map[string][]response.OrderItemResponse)
+	}
+
+	for i := range result.Items {
+		orderID := result.Items[i].ExternalOrderID
+		items, ok := itemsByOrder[orderID]
+		if !ok || len(items) == 0 {
+			fallback, fallbackErr := s.client.GetOrderItems(ctx, creds, accessToken, orderID)
+			if fallbackErr != nil {
+				s.logger.WithError(fallbackErr).WithField("order_id", orderID).Warn("order items fallback failed")
+				result.Items[i].Items = []response.OrderItemResponse{}
+				continue
+			}
+			items = fallback
+		}
+		if items == nil {
+			items = []response.OrderItemResponse{}
+		}
+		result.Items[i].Items = items
+	}
+
+	return nil
 }

@@ -14,9 +14,9 @@ import (
 )
 
 type StoreService interface {
-	AuthorizeURL(state string) *response.AuthorizeURLResponse
-	Connect(ctx context.Context, tenantID uuid.UUID, req request.ConnectStoreRequest, actor *uuid.UUID) (*response.TokenConnectResponse, error)
-	Refresh(ctx context.Context, req request.RefreshStoreRequest) (*response.TokenConnectResponse, error)
+	AuthorizeURL(creds client.Credentials, state string) *response.AuthorizeURLResponse
+	Connect(ctx context.Context, creds client.Credentials, tenantID uuid.UUID, req request.ConnectStoreRequest, actor *uuid.UUID) (*response.TokenConnectResponse, error)
+	Refresh(ctx context.Context, creds client.Credentials, req request.RefreshStoreRequest) (*response.TokenConnectResponse, error)
 }
 
 type storeServiceImpl struct {
@@ -30,15 +30,15 @@ func NewStoreService(logger *logrus.Logger, lazadaClient client.LazadaClient) St
 	return &storeServiceImpl{logger: logger, client: lazadaClient}
 }
 
-func (s *storeServiceImpl) AuthorizeURL(state string) *response.AuthorizeURLResponse {
-	return &response.AuthorizeURLResponse{URL: s.client.BuildAuthorizeURL(state)}
+func (s *storeServiceImpl) AuthorizeURL(creds client.Credentials, state string) *response.AuthorizeURLResponse {
+	return &response.AuthorizeURLResponse{URL: s.client.BuildAuthorizeURL(creds, state)}
 }
 
-func (s *storeServiceImpl) Connect(ctx context.Context, tenantID uuid.UUID, req request.ConnectStoreRequest, actor *uuid.UUID) (*response.TokenConnectResponse, error) {
+func (s *storeServiceImpl) Connect(ctx context.Context, creds client.Credentials, tenantID uuid.UUID, req request.ConnectStoreRequest, actor *uuid.UUID) (*response.TokenConnectResponse, error) {
 	_ = tenantID
 	_ = actor
 
-	tokens, err := s.client.ExchangeToken(ctx, req.Code)
+	tokens, err := s.client.ExchangeToken(ctx, creds, req.Code)
 	if err != nil {
 		if errors.Is(err, client.ErrInvalidCode) {
 			return nil, errors.New("invalid authorization code")
@@ -57,8 +57,8 @@ func (s *storeServiceImpl) Connect(ctx context.Context, tenantID uuid.UUID, req 
 	return toTokenResponse(tokens, req.DisplayName), nil
 }
 
-func (s *storeServiceImpl) Refresh(ctx context.Context, req request.RefreshStoreRequest) (*response.TokenConnectResponse, error) {
-	tokens, err := s.client.RefreshToken(ctx, req.RefreshToken)
+func (s *storeServiceImpl) Refresh(ctx context.Context, creds client.Credentials, req request.RefreshStoreRequest) (*response.TokenConnectResponse, error) {
+	tokens, err := s.client.RefreshToken(ctx, creds, req.RefreshToken)
 	if err != nil {
 		if errors.Is(err, client.ErrInvalidToken) {
 			return nil, errors.New("refresh token expired, reconnect store")

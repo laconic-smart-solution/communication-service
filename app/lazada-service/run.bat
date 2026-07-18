@@ -17,7 +17,7 @@ if exist ".env" (
     if not "%%A"=="" set "%%A=%%B"
   )
 ) else if exist ".env.example" (
-  echo [WARN] No .env found. Copy .env.example to .env and set LAZADA_APP_KEY / LAZADA_APP_SECRET.
+  echo [WARN] No .env found. Copy .env.example to .env and set LAZADA_REDIRECT_URI / GATEWAY_SECRET.
 )
 
 if not defined LAZADA_SERVICE_PORT set LAZADA_SERVICE_PORT=8084

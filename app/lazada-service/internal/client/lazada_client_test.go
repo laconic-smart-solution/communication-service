@@ -10,13 +10,12 @@ import (
 
 func TestBuildAuthorizeURL_ThailandRegionalEndpoint(t *testing.T) {
 	client := NewLazadaClient(&config.Config{
-		LazadaAppKey:      "139411",
-		LazadaAppSecret:   "secret",
 		LazadaRedirectURI: "https://dev-laco-invoice.laconic.co.th/stores/lazada/callback",
 		LazadaCountry:     "th",
 	}, 5).(*lazadaClientImpl)
 
-	got := client.BuildAuthorizeURL("state-123")
+	creds := Credentials{AppKey: "139411", AppSecret: "secret"}
+	got := client.BuildAuthorizeURL(creds, "state-123")
 	if !strings.HasPrefix(got, "https://api.lazada.co.th/oauth/authorize?") {
 		t.Fatalf("expected Thailand regional authorize URL, got %q", got)
 	}
@@ -49,13 +48,12 @@ func TestBuildAuthorizeURL_ThailandRegionalEndpoint(t *testing.T) {
 
 func TestBuildAuthorizeURL_DefaultCentralEndpointWithForceAuth(t *testing.T) {
 	client := NewLazadaClient(&config.Config{
-		LazadaAppKey:      "139411",
-		LazadaAppSecret:   "secret",
 		LazadaRedirectURI: "https://example.com/callback",
 		LazadaForceAuth:   true,
 	}, 5).(*lazadaClientImpl)
 
-	got := client.BuildAuthorizeURL("")
+	creds := Credentials{AppKey: "139411", AppSecret: "secret"}
+	got := client.BuildAuthorizeURL(creds, "")
 	if !strings.HasPrefix(got, defaultAuthURL+"?") {
 		t.Fatalf("expected central authorize URL, got %q", got)
 	}

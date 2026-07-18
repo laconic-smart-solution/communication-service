@@ -30,9 +30,6 @@ func main() {
 	if cfg.GatewaySharedSecret == "" {
 		log.Fatal("GATEWAY_SECRET is required")
 	}
-	if cfg.LazadaAppKey == "" || cfg.LazadaAppSecret == "" {
-		log.Fatal("LAZADA_APP_KEY and LAZADA_APP_SECRET are required")
-	}
 	if cfg.LazadaRedirectURI == "" {
 		log.Fatal("LAZADA_REDIRECT_URI is required")
 	}
@@ -59,7 +56,7 @@ func main() {
 	app.Use(fiberlogger.New())
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: cfg.CORSAllowOrigins,
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Tenant-ID, X-Actor-ID, X-User-ID, X-Gateway-Secret",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Tenant-ID, X-Actor-ID, X-User-ID, X-Gateway-Secret, X-Lazada-App-Key, X-Lazada-App-Secret",
 		AllowMethods: strings.Join([]string{
 			fiber.MethodGet, fiber.MethodPost, fiber.MethodPut,
 			fiber.MethodPatch, fiber.MethodDelete, fiber.MethodOptions,

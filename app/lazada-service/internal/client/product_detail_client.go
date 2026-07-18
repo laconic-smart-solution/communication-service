@@ -18,6 +18,7 @@ const productItemGetPath = "/product/item/get"
 
 func (c *lazadaClientImpl) GetProduct(
 	ctx context.Context,
+	creds Credentials,
 	accessToken string,
 	externalProductID string,
 	sku string,
@@ -28,13 +29,13 @@ func (c *lazadaClientImpl) GetProduct(
 	}
 
 	params := map[string]string{
-		"app_key":      c.appKey,
+		"app_key":      creds.AppKey,
 		"access_token": accessToken,
 		"sign_method":  "sha256",
 		"timestamp":    strconv.FormatInt(time.Now().UnixMilli(), 10),
 		"item_id":      itemID,
 	}
-	params["sign"] = sign(productItemGetPath, params, c.appSecret)
+	params["sign"] = sign(productItemGetPath, params, creds.AppSecret)
 
 	q := url.Values{}
 	for k, v := range params {
