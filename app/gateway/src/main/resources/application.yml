@@ -71,6 +71,13 @@ spring:
           filters:
             - RewritePath=/comms/whatsapp/(?<segment>.*), /${segment}
 
+        - id: comms-wechat
+          uri: ${WECHAT_SERVICE_URI:http://localhost:8090}
+          predicates:
+            - Path=/comms/wechat/**
+          filters:
+            - RewritePath=/comms/wechat/(?<segment>.*), /${segment}
+
 management:
   endpoints:
     web:

@@ -141,6 +141,20 @@ services:
     ports:
       - "8089:8089"
 
+  wechat-service:
+    build:
+      context: .
+      dockerfile: app/wechat-service/Dockerfile
+    container_name: comms-wechat-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      WECHAT_SERVICE_PORT: "8090"
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
+    ports:
+      - "8090:8090"
+
   gateway:
     build:
       context: app/gateway
@@ -161,6 +175,7 @@ services:
       TELEGRAM_SERVICE_URI: http://telegram-service:8087
       VIBER_SERVICE_URI: http://viber-service:8088
       WHATSAPP_SERVICE_URI: http://whatsapp-service:8089
+      WECHAT_SERVICE_URI: http://wechat-service:8090
       GATEWAY_CORS_ALLOWED_ORIGINS: ${GATEWAY_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     ports:
       - "8099:8099"
@@ -180,6 +195,8 @@ services:
       viber-service:
         condition: service_started
       whatsapp-service:
+        condition: service_started
+      wechat-service:
         condition: service_started
 
 volumes:
