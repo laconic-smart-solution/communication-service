@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -13,16 +14,10 @@ type Config struct {
 	Port     string
 
 	GatewaySharedSecret string
-	LineChannelSecret   string
-	LineChannelToken    string
+	CORSAllowOrigins    string
 
-	DatabaseURL          string
-	DBMaxOpenConns       int
-	DBMaxIdleConns       int
-	DBConnMaxLifetimeMin int
-	DBAutoMigrate        bool
-
-	CORSAllowOrigins string
+	BatchMinInterval   time.Duration
+	BatchMaxRecipients int
 }
 
 func Load() *Config {
@@ -34,16 +29,10 @@ func Load() *Config {
 		Port:     getEnv("LINE_SERVICE_PORT", getEnv("PORT", "8083")),
 
 		GatewaySharedSecret: getEnv("GATEWAY_SECRET", getEnv("GATEWAY_SHARED_SECRET", "")),
-		LineChannelSecret:   getEnv("LINE_CHANNEL_SECRET", ""),
-		LineChannelToken:    getEnv("LINE_CHANNEL_ACCESS_TOKEN", ""),
+		CORSAllowOrigins:    getEnv("CORS_ALLOW_ORIGINS", "*"),
 
-		DatabaseURL:          getEnv("DATABASE_URL", ""),
-		DBMaxOpenConns:       getEnvInt("DB_MAX_OPEN_CONNS", 20),
-		DBMaxIdleConns:       getEnvInt("DB_MAX_IDLE_CONNS", 5),
-		DBConnMaxLifetimeMin: getEnvInt("DB_CONN_MAX_LIFETIME_MIN", 30),
-		DBAutoMigrate:        getEnvBool("DB_AUTO_MIGRATE", true),
-
-		CORSAllowOrigins: getEnv("CORS_ALLOW_ORIGINS", "*"),
+		BatchMinInterval:   time.Duration(getEnvInt("LINE_BATCH_MIN_INTERVAL_MS", 250)) * time.Millisecond,
+		BatchMaxRecipients: getEnvInt("LINE_BATCH_MAX_RECIPIENTS", 10000),
 	}
 }
 
@@ -55,19 +44,13 @@ func getEnv(key, fallback string) string {
 }
 
 func getEnvInt(key string, fallback int) int {
-	if v, ok := os.LookupEnv(key); ok && v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
+	raw := getEnv(key, "")
+	if raw == "" {
+		return fallback
 	}
-	return fallback
-}
-
-func getEnvBool(key string, fallback bool) bool {
-	if v, ok := os.LookupEnv(key); ok && v != "" {
-		if b, err := strconv.ParseBool(v); err == nil {
-			return b
-		}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		return fallback
 	}
-	return fallback
+	return n
 }

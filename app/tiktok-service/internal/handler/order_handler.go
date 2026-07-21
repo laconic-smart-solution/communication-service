@@ -1,0 +1,42 @@
+package handler
+
+import (
+	"github.com/gofiber/fiber/v2"
+
+	"github.com/laconic-smart-solution/communication-service/app/tiktok-service/internal/request"
+	"github.com/laconic-smart-solution/communication-service/app/tiktok-service/internal/service"
+	"github.com/laconic-smart-solution/communication-service/pkg/utils"
+)
+
+type OrderHandler struct {
+	svc service.OrderService
+}
+
+func NewOrderHandler(svc service.OrderService) *OrderHandler {
+	return &OrderHandler{svc: svc}
+}
+
+func (h *OrderHandler) List(c *fiber.Ctx) error {
+	creds, err := requireTikTokCredentials(c)
+	if err != nil {
+		return badRequestCredentials(c, err)
+	}
+
+	if _, err := utils.RequireTenantID(c); err != nil {
+		return utils.BadRequest(c, err)
+	}
+
+	var req request.ListOrdersRequest
+	if err := c.QueryParser(&req); err != nil {
+		return utils.BadRequest(c, err)
+	}
+	if err := utils.ValidateStruct(req); err != nil {
+		return utils.BadRequest(c, err)
+	}
+
+	res, err := h.svc.List(c.Context(), creds, req)
+	if err != nil {
+		return utils.BadRequest(c, err)
+	}
+	return utils.OK(c, res)
+}

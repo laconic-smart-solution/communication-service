@@ -1,13 +1,16 @@
 package handler
 
 import (
+	"errors"
+
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 
 	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/request"
 	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/service"
 	"github.com/laconic-smart-solution/communication-service/pkg/utils"
 )
+
+const headerLineChannelAccessToken = "X-Line-Channel-Access-Token"
 
 type MessageHandler struct {
 	svc service.MessageService
@@ -18,12 +21,16 @@ func NewMessageHandler(svc service.MessageService) *MessageHandler {
 }
 
 func (h *MessageHandler) Send(c *fiber.Ctx) error {
-	tenantID, err := utils.RequireTenantID(c)
-	if err != nil {
+	if _, err := utils.RequireTenantID(c); err != nil {
 		return utils.BadRequest(c, err)
 	}
 	if _, err := utils.RequireActorID(c); err != nil {
 		return utils.Unauthorized(c, err)
+	}
+
+	accessToken := c.Get(headerLineChannelAccessToken)
+	if accessToken == "" {
+		return utils.BadRequest(c, errors.New("X-Line-Channel-Access-Token header is required"))
 	}
 
 	var req request.SendMessageRequest
@@ -34,30 +41,37 @@ func (h *MessageHandler) Send(c *fiber.Ctx) error {
 		return utils.BadRequest(c, err)
 	}
 
-	res, err := h.svc.Send(c.Context(), tenantID, req, utils.ActorID(c))
+	res, err := h.svc.Send(c.Context(), accessToken, req)
 	if err != nil {
 		return utils.BadRequest(c, err)
 	}
 	return utils.Created(c, res)
 }
 
-func (h *MessageHandler) GetByID(c *fiber.Ctx) error {
-	tenantID, err := utils.RequireTenantID(c)
-	if err != nil {
+func (h *MessageHandler) SendBatch(c *fiber.Ctx) error {
+	if _, err := utils.RequireTenantID(c); err != nil {
+		return utils.BadRequest(c, err)
+	}
+	if _, err := utils.RequireActorID(c); err != nil {
+		return utils.Unauthorized(c, err)
+	}
+
+	accessToken := c.Get(headerLineChannelAccessToken)
+	if accessToken == "" {
+		return utils.BadRequest(c, errors.New("X-Line-Channel-Access-Token header is required"))
+	}
+
+	var req request.SendBatchMessageRequest
+	if err := c.BodyParser(&req); err != nil {
+		return utils.BadRequest(c, err)
+	}
+	if err := utils.ValidateStruct(req); err != nil {
 		return utils.BadRequest(c, err)
 	}
 
-	messageID, err := uuid.Parse(c.Params("id"))
+	res, err := h.svc.SendBatch(c.Context(), accessToken, req)
 	if err != nil {
 		return utils.BadRequest(c, err)
 	}
-
-	res, err := h.svc.GetByID(c.Context(), tenantID, messageID)
-	if err != nil {
-		if err.Error() == "message not found" {
-			return utils.NotFound(c, err)
-		}
-		return utils.BadRequest(c, err)
-	}
-	return utils.OK(c, res)
+	return utils.Created(c, res)
 }

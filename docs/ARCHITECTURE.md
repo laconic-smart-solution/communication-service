@@ -31,7 +31,8 @@ Gateway  →  platform service  →  vendor API
         │                │                 │
         └────────────────┴─────────────────┘
                          ▼
-                  Vendor APIs + Postgres
+        Vendor APIs + Postgres
+        (line-service is stateless; no DB)
 ```
 
 ---
@@ -47,13 +48,15 @@ Gateway  →  platform service  →  vendor API
 4. Response    { "success": true, "data": { ... } }
 ```
 
-### Inbound webhook
+### Inbound webhook (LINE)
 
 ```
-1. Vendor      POST /comms/line/api/v1/webhooks  (no JWT)
-2. Gateway     forward raw body + vendor headers + X-Gateway-Secret
-3. line-svc    verify signature → persist event → 200 OK
+1. LINE         POST /comms/line/api/v1/webhooks?channel_secret=...&callback_url=...
+2. Gateway      forward raw body + X-Line-Signature (no JWT)
+3. line-svc     verify signature with query channel_secret → optional POST to callback_url → 200
 ```
+
+Calling apps own channel secrets/tokens; line-service does not persist them.
 
 ### Local development (bypass gateway)
 
@@ -78,8 +81,8 @@ JWT headers optional (dev fallbacks in `pkg/utils`).
 |-------|-----------|
 | Gateway | JWT on business routes; public webhooks + healthz |
 | Gateway → platform | `X-Gateway-Secret` (constant-time compare in each service) |
-| Platform → vendor | OAuth tokens in DB; webhook HMAC in `internal/client/` |
-| Tenancy | All queries scoped by `tenant_id` from `X-Tenant-ID` |
+| Platform → vendor | Caller-supplied tokens (LINE headers / Lazada query); OAuth tokens in DB where the service is stateful (Facebook); webhook HMAC in `internal/client/` |
+| Tenancy | Stateful services scope by `tenant_id` from `X-Tenant-ID`; LINE proxy does not store tenant data |
 
 ---
 

@@ -3,42 +3,35 @@ package service
 import (
 	"context"
 	"errors"
+	"net/url"
+	"strings"
 
-	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
 	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/client"
-	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/config"
-	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/models"
-	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/repository"
 )
 
 type WebhookService interface {
-	Handle(ctx context.Context, signature string, body []byte) error
+	Handle(ctx context.Context, signature string, body []byte, channelSecret, callbackURL string) error
 }
 
 type webhookServiceImpl struct {
-	logger   *logrus.Logger
-	cfg      *config.Config
-	line     client.LINEClient
-	messages repository.MessageRepository
-	channels repository.ChannelRepository
+	logger *logrus.Logger
+	line   client.LINEClient
 }
 
 var _ WebhookService = (*webhookServiceImpl)(nil)
 
-func NewWebhookService(
-	logger *logrus.Logger,
-	cfg *config.Config,
-	line client.LINEClient,
-	messages repository.MessageRepository,
-	channels repository.ChannelRepository,
-) WebhookService {
-	return &webhookServiceImpl{logger: logger, cfg: cfg, line: line, messages: messages, channels: channels}
+func NewWebhookService(logger *logrus.Logger, line client.LINEClient) WebhookService {
+	return &webhookServiceImpl{logger: logger, line: line}
 }
 
-func (s *webhookServiceImpl) Handle(ctx context.Context, signature string, body []byte) error {
-	if err := s.line.VerifyWebhook(signature, body, s.cfg.LineChannelSecret); err != nil {
+func (s *webhookServiceImpl) Handle(ctx context.Context, signature string, body []byte, channelSecret, callbackURL string) error {
+	if strings.TrimSpace(channelSecret) == "" {
+		return errors.New("channel_secret query parameter is required")
+	}
+
+	if err := s.line.VerifyWebhook(signature, body, channelSecret); err != nil {
 		if errors.Is(err, client.ErrInvalidSignature) {
 			return errors.New("invalid webhook signature")
 		}
@@ -51,22 +44,19 @@ func (s *webhookServiceImpl) Handle(ctx context.Context, signature string, body 
 		return errors.New("failed to parse webhook")
 	}
 
-	tenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-
-	for _, ev := range events {
-		msg := &models.Message{
-			ChannelID:   uuid.Nil,
-			TenantID:    tenantID,
-			Direction:   models.MessageDirectionInbound,
-			RecipientID: ev.UserID,
-			Body:        ev.Text,
-			Status:      models.MessageStatusSent,
-			ExternalID:  ev.MessageID,
-		}
-		if err := s.messages.Create(msg); err != nil {
-			s.logger.WithError(err).Error("persist inbound message")
-		}
+	callbackURL = strings.TrimSpace(callbackURL)
+	if callbackURL == "" || len(events) == 0 {
+		return nil
 	}
 
+	parsed, err := url.Parse(callbackURL)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return errors.New("callback_url must be a valid https URL")
+	}
+
+	if err := s.line.ForwardEvents(ctx, callbackURL, events); err != nil {
+		s.logger.WithError(err).WithField("callback_url", parsed.Host).Error("forward webhook events")
+		return errors.New("failed to forward webhook events")
+	}
 	return nil
 }

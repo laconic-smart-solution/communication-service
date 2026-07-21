@@ -46,14 +46,9 @@ services:
       - .env
     environment:
       LINE_SERVICE_PORT: "8083"
-      DATABASE_URL: postgres://${POSTGRES_USER:-comms}:${POSTGRES_PASSWORD:-comms}@postgres:5432/${POSTGRES_DB:-communication}?sslmode=disable
-      DB_AUTO_MIGRATE: "true"
       GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
     ports:
       - "8083:8083"
-    depends_on:
-      postgres:
-        condition: service_healthy
 
   lazada-service:
     build:
@@ -65,17 +60,100 @@ services:
       - .env
     environment:
       LAZADA_SERVICE_PORT: "8084"
-      DATABASE_URL: postgres://${POSTGRES_USER:-comms}:${POSTGRES_PASSWORD:-comms}@postgres:5432/${POSTGRES_DB:-communication}?sslmode=disable
-      DB_AUTO_MIGRATE: "true"
       GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
-      LAZADA_APP_KEY: ${LAZADA_APP_KEY:-}
-      LAZADA_APP_SECRET: ${LAZADA_APP_SECRET:-}
-      LAZADA_REDIRECT_URI: ${LAZADA_REDIRECT_URI:-http://localhost:5173/lazada/callback}
+      LAZADA_REDIRECT_URI: ${LAZADA_REDIRECT_URI:-https://dev-laco-invoice.laconic.co.th/stores/lazada/callback}
+      LAZADA_COUNTRY: ${LAZADA_COUNTRY:-th}
+      LAZADA_FORCE_AUTH: ${LAZADA_FORCE_AUTH:-false}
     ports:
       - "8084:8084"
-    depends_on:
-      postgres:
-        condition: service_healthy
+
+  shopee-service:
+    build:
+      context: .
+      dockerfile: app/shopee-service/Dockerfile
+    container_name: comms-shopee-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      SHOPEE_SERVICE_PORT: "8085"
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
+      SHOPEE_PARTNER_ID: ${SHOPEE_PARTNER_ID:-}
+      SHOPEE_PARTNER_KEY: ${SHOPEE_PARTNER_KEY:-}
+      SHOPEE_REDIRECT_URI: ${SHOPEE_REDIRECT_URI:-http://localhost:5173/stores/shopee/callback}
+    ports:
+      - "8085:8085"
+
+  tiktok-service:
+    build:
+      context: .
+      dockerfile: app/tiktok-service/Dockerfile
+    container_name: comms-tiktok-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TIKTOK_SERVICE_PORT: "8086"
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
+      TIKTOK_REDIRECT_URI: ${TIKTOK_REDIRECT_URI:-http://localhost:5173/stores/tiktok/callback}
+    ports:
+      - "8086:8086"
+
+  telegram-service:
+    build:
+      context: .
+      dockerfile: app/telegram-service/Dockerfile
+    container_name: comms-telegram-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TELEGRAM_SERVICE_PORT: "8087"
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
+    ports:
+      - "8087:8087"
+
+  viber-service:
+    build:
+      context: .
+      dockerfile: app/viber-service/Dockerfile
+    container_name: comms-viber-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      VIBER_SERVICE_PORT: "8088"
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
+    ports:
+      - "8088:8088"
+
+  whatsapp-service:
+    build:
+      context: .
+      dockerfile: app/whatsapp-service/Dockerfile
+    container_name: comms-whatsapp-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      WHATSAPP_SERVICE_PORT: "8089"
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
+    ports:
+      - "8089:8089"
+
+  wechat-service:
+    build:
+      context: .
+      dockerfile: app/wechat-service/Dockerfile
+    container_name: comms-wechat-service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      WECHAT_SERVICE_PORT: "8090"
+      GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
+    ports:
+      - "8090:8090"
 
   gateway:
     build:
@@ -86,21 +164,39 @@ services:
     env_file:
       - .env
     environment:
-      GATEWAY_PORT: "8080"
+      GATEWAY_PORT: "8099"
       GATEWAY_SECRET: ${GATEWAY_SECRET:-hello}
       GATEWAY_JWT_HMAC_SECRET: ${GATEWAY_JWT_HMAC_SECRET:-comms-local-dev-jwt-hmac-secret-ok!}
       FACEBOOK_SERVICE_URI: http://facebook-service:8081
       LINE_SERVICE_URI: http://line-service:8083
       LAZADA_SERVICE_URI: http://lazada-service:8084
+      SHOPEE_SERVICE_URI: http://shopee-service:8085
+      TIKTOK_SERVICE_URI: http://tiktok-service:8086
+      TELEGRAM_SERVICE_URI: http://telegram-service:8087
+      VIBER_SERVICE_URI: http://viber-service:8088
+      WHATSAPP_SERVICE_URI: http://whatsapp-service:8089
+      WECHAT_SERVICE_URI: http://wechat-service:8090
       GATEWAY_CORS_ALLOWED_ORIGINS: ${GATEWAY_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
     ports:
-      - "8080:8080"
+      - "8099:8099"
     depends_on:
       facebook-service:
         condition: service_started
       line-service:
         condition: service_started
       lazada-service:
+        condition: service_started
+      shopee-service:
+        condition: service_started
+      tiktok-service:
+        condition: service_started
+      telegram-service:
+        condition: service_started
+      viber-service:
+        condition: service_started
+      whatsapp-service:
+        condition: service_started
+      wechat-service:
         condition: service_started
 
 volumes:

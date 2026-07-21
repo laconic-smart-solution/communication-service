@@ -17,10 +17,8 @@ import (
 
 	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/client"
 	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/config"
-	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/database"
 	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/handler"
 	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/middleware"
-	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/repository"
 	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/routes"
 	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/service"
 )
@@ -33,30 +31,26 @@ func main() {
 		log.Fatal("GATEWAY_SECRET is required")
 	}
 
-	db, err := database.Connect(cfg, log)
-	if err != nil {
-		log.WithError(err).Fatal("db connect")
-	}
-
 	lineClient := client.NewLINEClient(15)
-
-	channelRepo := repository.NewChannelRepository(db)
-	messageRepo := repository.NewMessageRepository(db)
-
-	channelSvc := service.NewChannelService(log, channelRepo)
-	messageSvc := service.NewMessageService(log, cfg, channelRepo, messageRepo, lineClient)
-	webhookSvc := service.NewWebhookService(log, cfg, lineClient, messageRepo, channelRepo)
+	batchCfg := service.BatchConfig{
+		MinInterval:   cfg.BatchMinInterval,
+		MaxRecipients: cfg.BatchMaxRecipients,
+		MaxRetries:    3,
+		BackoffBase:   time.Second,
+	}
+	messageSvc := service.NewMessageService(log, lineClient, batchCfg)
+	webhookSvc := service.NewWebhookService(log, lineClient)
 
 	handlers := routes.Handlers{
-		Channel: handler.NewChannelHandler(channelSvc),
 		Message: handler.NewMessageHandler(messageSvc),
 		Webhook: handler.NewWebhookHandler(webhookSvc),
+		QR:      handler.NewQRHandler(service.NewQRService()),
 	}
 
 	app := fiber.New(fiber.Config{
 		AppName:      "line-service",
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		WriteTimeout: 5 * time.Minute,
 		IdleTimeout:  60 * time.Second,
 	})
 
@@ -64,7 +58,7 @@ func main() {
 	app.Use(fiberlogger.New())
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: cfg.CORSAllowOrigins,
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Tenant-ID, X-Actor-ID, X-User-ID, X-Gateway-Secret, X-Line-Signature",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Tenant-ID, X-Actor-ID, X-User-ID, X-Gateway-Secret, X-Line-Signature, X-Line-Channel-Access-Token",
 		AllowMethods: strings.Join([]string{
 			fiber.MethodGet, fiber.MethodPost, fiber.MethodPut,
 			fiber.MethodPatch, fiber.MethodDelete, fiber.MethodOptions,

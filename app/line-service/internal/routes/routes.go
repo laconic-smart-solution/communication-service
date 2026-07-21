@@ -8,9 +8,9 @@ import (
 )
 
 type Handlers struct {
-	Channel *handler.ChannelHandler
 	Message *handler.MessageHandler
 	Webhook *handler.WebhookHandler
+	QR      *handler.QRHandler
 }
 
 func Register(app *fiber.App, h Handlers) {
@@ -20,13 +20,7 @@ func Register(app *fiber.App, h Handlers) {
 	})
 
 	api.Post("/webhooks", h.Webhook.Handle)
-
-	channels := api.Group("/channels")
-	channels.Post("/", h.Channel.Connect)
-	channels.Get("/", h.Channel.List)
-	channels.Delete("/:id", h.Channel.Revoke)
-
-	messages := api.Group("/messages")
-	messages.Post("/", h.Message.Send)
-	messages.Get("/:id", h.Message.GetByID)
+	api.Post("/messages", h.Message.Send)
+	api.Post("/messages/batch", h.Message.SendBatch)
+	api.Get("/qr", h.QR.Get)
 }

@@ -3,84 +3,78 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
+	"time"
 
-	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
-	"gorm.io/gorm"
 
 	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/client"
-	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/config"
-	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/mapper"
-	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/models"
-	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/repository"
 	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/request"
 	"github.com/laconic-smart-solution/communication-service/app/line-service/internal/response"
 )
 
+const multicastChunkSize = 500
+
+type BatchConfig struct {
+	MinInterval   time.Duration
+	MaxRecipients int
+	MaxRetries    int
+	BackoffBase   time.Duration
+}
+
+func DefaultBatchConfig() BatchConfig {
+	return BatchConfig{
+		MinInterval:   250 * time.Millisecond,
+		MaxRecipients: 10000,
+		MaxRetries:    3,
+		BackoffBase:   time.Second,
+	}
+}
+
 type MessageService interface {
-	Send(ctx context.Context, tenantID uuid.UUID, req request.SendMessageRequest, actor *uuid.UUID) (*response.MessageResponse, error)
-	GetByID(ctx context.Context, tenantID, messageID uuid.UUID) (*response.MessageResponse, error)
+	Send(ctx context.Context, accessToken string, req request.SendMessageRequest) (*response.SendMessageResponse, error)
+	SendBatch(ctx context.Context, accessToken string, req request.SendBatchMessageRequest) (*response.SendBatchMessageResponse, error)
 }
 
 type messageServiceImpl struct {
-	logger   *logrus.Logger
-	cfg      *config.Config
-	channels repository.ChannelRepository
-	repo     repository.MessageRepository
-	line     client.LINEClient
+	logger *logrus.Logger
+	line   client.LINEClient
+	batch  BatchConfig
+	sleep  func(context.Context, time.Duration) error
 }
 
 var _ MessageService = (*messageServiceImpl)(nil)
 
-func NewMessageService(
-	logger *logrus.Logger,
-	cfg *config.Config,
-	channels repository.ChannelRepository,
-	repo repository.MessageRepository,
-	line client.LINEClient,
-) MessageService {
-	return &messageServiceImpl{logger: logger, cfg: cfg, channels: channels, repo: repo, line: line}
+func NewMessageService(logger *logrus.Logger, line client.LINEClient, batch BatchConfig) MessageService {
+	if batch.MaxRecipients <= 0 {
+		batch.MaxRecipients = 10000
+	}
+	if batch.MaxRetries <= 0 {
+		batch.MaxRetries = 3
+	}
+	if batch.BackoffBase <= 0 {
+		batch.BackoffBase = time.Second
+	}
+	return &messageServiceImpl{
+		logger: logger,
+		line:   line,
+		batch:  batch,
+		sleep:  sleepContext,
+	}
 }
 
-func (s *messageServiceImpl) Send(ctx context.Context, tenantID uuid.UUID, req request.SendMessageRequest, actor *uuid.UUID) (*response.MessageResponse, error) {
-	ch, err := s.channels.GetByIDAndTenant(req.ChannelID, tenantID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("channel not found")
-		}
-		return nil, err
+func (s *messageServiceImpl) Send(ctx context.Context, accessToken string, req request.SendMessageRequest) (*response.SendMessageResponse, error) {
+	if accessToken == "" {
+		return nil, errors.New("X-Line-Channel-Access-Token header is required")
 	}
 
-	token := ch.AccessToken
-	if token == "" {
-		token = s.cfg.LineChannelToken
-	}
-
-	msg := &models.Message{
-		ChannelID:   ch.ID,
-		TenantID:    tenantID,
-		Direction:   models.MessageDirectionOutbound,
-		RecipientID: req.RecipientID,
-		Body:        req.Text,
-		Status:      models.MessageStatusPending,
-	}
-	msg.CreatedBy = actor
-	msg.UpdatedBy = actor
-
-	if err := s.repo.Create(msg); err != nil {
-		s.logger.WithError(err).Error("create message")
-		return nil, errors.New("failed to create message")
-	}
-
-	err = s.line.SendMessage(ctx, client.SendMessageInput{
-		AccessToken: token,
+	err := s.line.SendMessage(ctx, client.SendMessageInput{
+		AccessToken: accessToken,
 		RecipientID: req.RecipientID,
 		Text:        req.Text,
 	})
 	if err != nil {
-		msg.Status = models.MessageStatusFailed
-		msg.ProviderError = err.Error()
-		_ = s.repo.Update(msg)
 		if errors.Is(err, client.ErrRateLimited) {
 			return nil, errors.New("line rate limit exceeded")
 		}
@@ -91,24 +85,130 @@ func (s *messageServiceImpl) Send(ctx context.Context, tenantID uuid.UUID, req r
 		return nil, errors.New("failed to send message")
 	}
 
-	msg.Status = models.MessageStatusSent
-	if err := s.repo.Update(msg); err != nil {
-		s.logger.WithError(err).Error("update message status")
-		return nil, errors.New("failed to update message status")
-	}
-
-	res := mapper.ToMessageResponse(*msg)
-	return &res, nil
+	return &response.SendMessageResponse{
+		RecipientID: req.RecipientID,
+		Status:      "sent",
+	}, nil
 }
 
-func (s *messageServiceImpl) GetByID(ctx context.Context, tenantID, messageID uuid.UUID) (*response.MessageResponse, error) {
-	msg, err := s.repo.GetByIDAndTenant(messageID, tenantID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("message not found")
-		}
-		return nil, err
+func (s *messageServiceImpl) SendBatch(ctx context.Context, accessToken string, req request.SendBatchMessageRequest) (*response.SendBatchMessageResponse, error) {
+	if accessToken == "" {
+		return nil, errors.New("X-Line-Channel-Access-Token header is required")
 	}
-	res := mapper.ToMessageResponse(*msg)
-	return &res, nil
+
+	text := strings.TrimSpace(req.Text)
+	if text == "" {
+		return nil, errors.New("text is required")
+	}
+
+	ids := dedupeRecipientIDs(req.RecipientIDs)
+	if len(ids) == 0 {
+		return nil, errors.New("recipient_ids is required")
+	}
+	if len(ids) > s.batch.MaxRecipients {
+		return nil, fmt.Errorf("recipient_ids exceeds maximum of %d", s.batch.MaxRecipients)
+	}
+
+	chunks := chunkStrings(ids, multicastChunkSize)
+	out := &response.SendBatchMessageResponse{
+		Total:      len(ids),
+		ChunkCount: len(chunks),
+	}
+
+	for i, chunk := range chunks {
+		if i > 0 && s.batch.MinInterval > 0 {
+			if err := s.sleep(ctx, s.batch.MinInterval); err != nil {
+				return nil, err
+			}
+		}
+
+		err := s.sendMulticastWithRetry(ctx, accessToken, chunk, text)
+		if err != nil {
+			if errors.Is(err, client.ErrInvalidToken) {
+				return nil, errors.New("invalid line channel token")
+			}
+			s.logger.WithError(err).WithField("chunk_size", len(chunk)).Error("send batch chunk")
+			out.Failed += len(chunk)
+			out.FailedRecipientIDs = append(out.FailedRecipientIDs, chunk...)
+			continue
+		}
+		out.Sent += len(chunk)
+	}
+
+	return out, nil
+}
+
+func (s *messageServiceImpl) sendMulticastWithRetry(ctx context.Context, accessToken string, recipientIDs []string, text string) error {
+	var lastErr error
+	for attempt := 0; attempt <= s.batch.MaxRetries; attempt++ {
+		if attempt > 0 {
+			backoff := s.batch.BackoffBase * time.Duration(1<<(attempt-1))
+			if err := s.sleep(ctx, backoff); err != nil {
+				return err
+			}
+		}
+
+		err := s.line.SendMulticast(ctx, client.SendMulticastInput{
+			AccessToken:  accessToken,
+			RecipientIDs: recipientIDs,
+			Text:         text,
+		})
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if !errors.Is(err, client.ErrRateLimited) {
+			return err
+		}
+	}
+	return lastErr
+}
+
+func dedupeRecipientIDs(ids []string) []string {
+	seen := make(map[string]struct{}, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
+}
+
+func chunkStrings(ids []string, size int) [][]string {
+	if size <= 0 {
+		size = multicastChunkSize
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	chunks := make([][]string, 0, (len(ids)+size-1)/size)
+	for i := 0; i < len(ids); i += size {
+		end := i + size
+		if end > len(ids) {
+			end = len(ids)
+		}
+		chunks = append(chunks, ids[i:end])
+	}
+	return chunks
+}
+
+func sleepContext(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }

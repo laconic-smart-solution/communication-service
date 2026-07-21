@@ -17,12 +17,10 @@ import (
 
 	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/client"
 	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/config"
-	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/database"
 	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/handler"
-	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/middleware"
-	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/repository"
 	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/routes"
 	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/service"
+	pkgmiddleware "github.com/laconic-smart-solution/communication-service/pkg/middleware"
 )
 
 func main() {
@@ -32,24 +30,19 @@ func main() {
 	if cfg.GatewaySharedSecret == "" {
 		log.Fatal("GATEWAY_SECRET is required")
 	}
-	if cfg.LazadaAppKey == "" || cfg.LazadaAppSecret == "" {
-		log.Fatal("LAZADA_APP_KEY and LAZADA_APP_SECRET are required")
-	}
 	if cfg.LazadaRedirectURI == "" {
 		log.Fatal("LAZADA_REDIRECT_URI is required")
 	}
 
-	db, err := database.Connect(cfg, log)
-	if err != nil {
-		log.WithError(err).Fatal("db connect")
-	}
-
 	lazadaClient := client.NewLazadaClient(cfg, 15)
-	storeRepo := repository.NewStoreRepository(db)
-	storeSvc := service.NewStoreService(log, storeRepo, lazadaClient)
+	storeSvc := service.NewStoreService(log, lazadaClient)
+	orderSvc := service.NewOrderService(log, lazadaClient)
+	productSvc := service.NewProductService(log, lazadaClient)
 
 	handlers := routes.Handlers{
-		Store: handler.NewStoreHandler(storeSvc),
+		Store:   handler.NewStoreHandler(storeSvc),
+		Order:   handler.NewOrderHandler(orderSvc),
+		Product: handler.NewProductHandler(productSvc),
 	}
 
 	app := fiber.New(fiber.Config{
@@ -63,13 +56,13 @@ func main() {
 	app.Use(fiberlogger.New())
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: cfg.CORSAllowOrigins,
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Tenant-ID, X-Actor-ID, X-User-ID, X-Gateway-Secret",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization, X-Tenant-ID, X-Actor-ID, X-User-ID, X-Gateway-Secret, X-Lazada-App-Key, X-Lazada-App-Secret",
 		AllowMethods: strings.Join([]string{
 			fiber.MethodGet, fiber.MethodPost, fiber.MethodPut,
 			fiber.MethodPatch, fiber.MethodDelete, fiber.MethodOptions,
 		}, ","),
 	}))
-	app.Use(middleware.RequireGatewaySecret(cfg.GatewaySharedSecret))
+	app.Use(pkgmiddleware.RequireGatewaySecret(cfg.GatewaySharedSecret))
 	routes.Register(app, handlers)
 
 	addr := ":" + cfg.Port

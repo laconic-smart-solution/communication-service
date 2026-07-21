@@ -13,11 +13,13 @@ import (
 	"time"
 
 	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/config"
+	"github.com/laconic-smart-solution/communication-service/app/lazada-service/internal/response"
 )
 
 const (
-	authBaseURL     = "https://auth.lazada.com/rest"
-	tokenCreatePath = "/auth/token/create"
+	authBaseURL      = "https://auth.lazada.com/rest"
+	defaultAuthURL   = "https://auth.lazada.com/oauth/authorize"
+	tokenCreatePath  = "/auth/token/create"
 	tokenRefreshPath = "/auth/token/refresh"
 )
 
@@ -26,6 +28,12 @@ var (
 	ErrInvalidToken = errors.New("invalid lazada token")
 	ErrRateLimited  = errors.New("lazada api rate limited")
 )
+
+// Credentials are Lazada Open Platform app credentials supplied per request by the caller.
+type Credentials struct {
+	AppKey    string
+	AppSecret string
+}
 
 type TokenPair struct {
 	AccessToken      string
@@ -39,15 +47,21 @@ type TokenPair struct {
 }
 
 type LazadaClient interface {
-	BuildAuthorizeURL(state string) string
-	ExchangeToken(ctx context.Context, code string) (*TokenPair, error)
-	RefreshToken(ctx context.Context, refreshToken string) (*TokenPair, error)
+	BuildAuthorizeURL(creds Credentials, state string) string
+	ExchangeToken(ctx context.Context, creds Credentials, code string) (*TokenPair, error)
+	RefreshToken(ctx context.Context, creds Credentials, refreshToken string) (*TokenPair, error)
+	ListProducts(ctx context.Context, creds Credentials, accessToken string, page, limit int, search string) (*response.ProductListResponse, error)
+	GetProduct(ctx context.Context, creds Credentials, accessToken, externalProductID, sku string) (*response.ProductDetailResponse, error)
+	ListOrders(ctx context.Context, creds Credentials, accessToken string, page, limit int, updatedFrom string) (*response.OrderListResponse, error)
+	GetMultipleOrderItems(ctx context.Context, creds Credentials, accessToken string, orderIDs []string) (map[string][]response.OrderItemResponse, error)
+	GetOrderItems(ctx context.Context, creds Credentials, accessToken string, orderID string) ([]response.OrderItemResponse, error)
 }
 
 type lazadaClientImpl struct {
-	appKey      string
-	appSecret   string
 	redirectURI string
+	country     string
+	forceAuth   bool
+	authBaseURL string
 	httpClient  *http.Client
 }
 
@@ -58,44 +72,79 @@ func NewLazadaClient(cfg *config.Config, timeoutSec int) LazadaClient {
 		timeoutSec = 15
 	}
 	return &lazadaClientImpl{
-		appKey:      cfg.LazadaAppKey,
-		appSecret:   cfg.LazadaAppSecret,
 		redirectURI: cfg.LazadaRedirectURI,
+		country:     cfg.LazadaCountry,
+		forceAuth:   cfg.LazadaForceAuth,
+		authBaseURL: resolveAuthorizeBaseURL(cfg.LazadaAuthBaseURL, cfg.LazadaCountry),
 		httpClient:  &http.Client{Timeout: time.Duration(timeoutSec) * time.Second},
 	}
 }
 
-func (c *lazadaClientImpl) BuildAuthorizeURL(state string) string {
+func (c *lazadaClientImpl) BuildAuthorizeURL(creds Credentials, state string) string {
 	q := url.Values{}
 	q.Set("response_type", "code")
-	q.Set("force_auth", "true")
+	q.Set("client_id", creds.AppKey)
 	q.Set("redirect_uri", c.redirectURI)
-	q.Set("client_id", c.appKey)
+	if c.forceAuth {
+		q.Set("force_auth", "true")
+	}
+	if c.country != "" {
+		q.Set("country", c.country)
+	}
 	if state != "" {
 		q.Set("state", state)
 	}
-	return "https://auth.lazada.com/oauth/authorize?" + q.Encode()
+	return c.authBaseURL + "?" + q.Encode()
 }
 
-func (c *lazadaClientImpl) ExchangeToken(ctx context.Context, code string) (*TokenPair, error) {
+func resolveAuthorizeBaseURL(explicitBaseURL, country string) string {
+	if explicitBaseURL != "" {
+		return explicitBaseURL
+	}
+	if regional, ok := regionalAuthorizeURL(country); ok {
+		return regional
+	}
+	return defaultAuthURL
+}
+
+func regionalAuthorizeURL(country string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(country)) {
+	case "th":
+		return "https://api.lazada.co.th/oauth/authorize", true
+	case "sg":
+		return "https://api.lazada.sg/oauth/authorize", true
+	case "my":
+		return "https://api.lazada.com.my/oauth/authorize", true
+	case "ph":
+		return "https://api.lazada.com.ph/oauth/authorize", true
+	case "id":
+		return "https://api.lazada.co.id/oauth/authorize", true
+	case "vn":
+		return "https://api.lazada.vn/oauth/authorize", true
+	default:
+		return "", false
+	}
+}
+
+func (c *lazadaClientImpl) ExchangeToken(ctx context.Context, creds Credentials, code string) (*TokenPair, error) {
 	params := map[string]string{
-		"app_key":     c.appKey,
+		"app_key":     creds.AppKey,
 		"code":        code,
 		"sign_method": "sha256",
 		"timestamp":   strconv.FormatInt(time.Now().UnixMilli(), 10),
 	}
-	params["sign"] = sign(tokenCreatePath, params, c.appSecret)
+	params["sign"] = sign(tokenCreatePath, params, creds.AppSecret)
 	return c.doTokenRequest(ctx, tokenCreatePath, params)
 }
 
-func (c *lazadaClientImpl) RefreshToken(ctx context.Context, refreshToken string) (*TokenPair, error) {
+func (c *lazadaClientImpl) RefreshToken(ctx context.Context, creds Credentials, refreshToken string) (*TokenPair, error) {
 	params := map[string]string{
-		"app_key":       c.appKey,
+		"app_key":       creds.AppKey,
 		"refresh_token": refreshToken,
 		"sign_method":   "sha256",
 		"timestamp":     strconv.FormatInt(time.Now().UnixMilli(), 10),
 	}
-	params["sign"] = sign(tokenRefreshPath, params, c.appSecret)
+	params["sign"] = sign(tokenRefreshPath, params, creds.AppSecret)
 	return c.doTokenRequest(ctx, tokenRefreshPath, params)
 }
 

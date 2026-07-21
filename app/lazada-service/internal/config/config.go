@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -13,9 +14,10 @@ type Config struct {
 	Port     string
 
 	GatewaySharedSecret string
-	LazadaAppKey        string
-	LazadaAppSecret     string
 	LazadaRedirectURI   string
+	LazadaCountry       string
+	LazadaForceAuth     bool
+	LazadaAuthBaseURL   string
 
 	DatabaseURL          string
 	DBMaxOpenConns       int
@@ -35,9 +37,10 @@ func Load() *Config {
 		Port:     getEnv("LAZADA_SERVICE_PORT", getEnv("PORT", "8084")),
 
 		GatewaySharedSecret: getEnv("GATEWAY_SECRET", getEnv("GATEWAY_SHARED_SECRET", "")),
-		LazadaAppKey:        getEnv("LAZADA_APP_KEY", ""),
-		LazadaAppSecret:     getEnv("LAZADA_APP_SECRET", ""),
-		LazadaRedirectURI:   getEnv("LAZADA_REDIRECT_URI", ""),
+		LazadaRedirectURI:   strings.TrimRight(getEnv("LAZADA_REDIRECT_URI", ""), "/"),
+		LazadaCountry:       strings.ToLower(strings.TrimSpace(getEnv("LAZADA_COUNTRY", ""))),
+		LazadaForceAuth:     getEnvBool("LAZADA_FORCE_AUTH", false),
+		LazadaAuthBaseURL:   strings.TrimRight(strings.TrimSpace(getEnv("LAZADA_AUTH_BASE_URL", "")), "/"),
 
 		DatabaseURL:          getEnv("DATABASE_URL", ""),
 		DBMaxOpenConns:       getEnvInt("DB_MAX_OPEN_CONNS", 20),

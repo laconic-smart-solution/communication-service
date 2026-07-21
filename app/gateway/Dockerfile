@@ -8,5 +8,5 @@ RUN mvn -q -DskipTests package
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=builder /build/target/communication-gateway-*.jar /app/gateway.jar
-EXPOSE 8080
+EXPOSE 8099
 ENTRYPOINT ["java", "-jar", "/app/gateway.jar"]

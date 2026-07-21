@@ -1,5 +1,5 @@
 server:
-  port: ${GATEWAY_PORT:8080}
+  port: ${GATEWAY_PORT:8099}
 
 spring:
   application:
@@ -35,6 +35,48 @@ spring:
             - Path=/comms/lazada/**
           filters:
             - RewritePath=/comms/lazada/(?<segment>.*), /${segment}
+
+        - id: comms-shopee
+          uri: ${SHOPEE_SERVICE_URI:http://localhost:8085}
+          predicates:
+            - Path=/comms/shopee/**
+          filters:
+            - RewritePath=/comms/shopee/(?<segment>.*), /${segment}
+
+        - id: comms-tiktok
+          uri: ${TIKTOK_SERVICE_URI:http://localhost:8086}
+          predicates:
+            - Path=/comms/tiktok/**
+          filters:
+            - RewritePath=/comms/tiktok/(?<segment>.*), /${segment}
+
+        - id: comms-telegram
+          uri: ${TELEGRAM_SERVICE_URI:http://localhost:8087}
+          predicates:
+            - Path=/comms/telegram/**
+          filters:
+            - RewritePath=/comms/telegram/(?<segment>.*), /${segment}
+
+        - id: comms-viber
+          uri: ${VIBER_SERVICE_URI:http://localhost:8088}
+          predicates:
+            - Path=/comms/viber/**
+          filters:
+            - RewritePath=/comms/viber/(?<segment>.*), /${segment}
+
+        - id: comms-whatsapp
+          uri: ${WHATSAPP_SERVICE_URI:http://localhost:8089}
+          predicates:
+            - Path=/comms/whatsapp/**
+          filters:
+            - RewritePath=/comms/whatsapp/(?<segment>.*), /${segment}
+
+        - id: comms-wechat
+          uri: ${WECHAT_SERVICE_URI:http://localhost:8090}
+          predicates:
+            - Path=/comms/wechat/**
+          filters:
+            - RewritePath=/comms/wechat/(?<segment>.*), /${segment}
 
 management:
   endpoints:

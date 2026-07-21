@@ -45,9 +45,12 @@ cp app/lazada-service/.env.example app/lazada-service/.env
 | `DATABASE_URL` | yes | — | Postgres connection string |
 | `DB_AUTO_MIGRATE` | no | `true` | Run GORM migrations on startup |
 | `GATEWAY_SECRET` | yes | — | Service-to-service auth (`X-Gateway-Secret`) |
-| `LAZADA_APP_KEY` | yes | — | Lazada app key from Open Platform console |
-| `LAZADA_APP_SECRET` | yes | — | Lazada app secret |
 | `LAZADA_REDIRECT_URI` | yes | — | OAuth callback URL registered in Lazada app |
+| `LAZADA_COUNTRY` | no | — | Seller country (`th`, `sg`, `my`, …). Uses regional OAuth URL when set. |
+| `LAZADA_FORCE_AUTH` | no | `false` | Set `true` only when you need to force a fresh Lazada auth session. |
+| `LAZADA_AUTH_BASE_URL` | no | — | Override authorize URL (defaults to regional or `auth.lazada.com`). |
+
+App key and app secret are **not** configured in lazada-service. Callers must send `X-Lazada-App-Key` and `X-Lazada-App-Secret` on every request (same pattern as LINE / Telegram channel tokens).
 
 ### Example `.env` (local)
 
@@ -57,9 +60,9 @@ LOG_LEVEL=info
 DATABASE_URL=postgres://comms:comms@localhost:5433/communication?sslmode=disable
 DB_AUTO_MIGRATE=true
 GATEWAY_SECRET=hello
-LAZADA_APP_KEY=your_app_key
-LAZADA_APP_SECRET=your_app_secret
-LAZADA_REDIRECT_URI=http://localhost:5173/lazada/callback
+LAZADA_REDIRECT_URI=https://dev-laco-invoice.laconic.co.th/stores/lazada/callback
+LAZADA_COUNTRY=th
+LAZADA_FORCE_AUTH=false
 ```
 
 ---
@@ -68,7 +71,7 @@ LAZADA_REDIRECT_URI=http://localhost:5173/lazada/callback
 
 1. Open [Lazada Open Platform](https://open.lazada.com/) and create an app.
 2. Set the **Callback URL** to match `LAZADA_REDIRECT_URI`.
-3. Note the **App Key** and **App Secret** for env vars.
+3. Note the **App Key** and **App Secret** — configure them on the **caller** (e.g. laco-invoice `LAZADA_APP_KEY` / `LAZADA_APP_SECRET`); lazada-service receives them via `X-Lazada-App-Key` / `X-Lazada-App-Secret` headers.
 4. Ensure seller authorization is enabled for your app category.
 
 OAuth docs: [Generate Access Token (`/auth/token/create`)](https://open.lazada.com/apps/doc/api?path=%2Fauth%2Ftoken%2Fcreate)

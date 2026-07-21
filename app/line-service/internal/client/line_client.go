@@ -26,17 +26,33 @@ type SendMessageInput struct {
 	Text        string
 }
 
+type SendMulticastInput struct {
+	AccessToken  string
+	RecipientIDs []string
+	Text         string
+}
+
+// Event types forwarded to the calling app.
+const (
+	EventTypeMessage  = "message"
+	EventTypeFollow   = "follow"
+	EventTypeUnfollow = "unfollow"
+)
+
 type InboundEvent struct {
-	Type      string
-	UserID    string
-	MessageID string
-	Text      string
+	Type       string `json:"type"`
+	UserID     string `json:"user_id"`
+	ReplyToken string `json:"reply_token,omitempty"`
+	MessageID  string `json:"message_id,omitempty"`
+	Text       string `json:"text,omitempty"`
 }
 
 type LINEClient interface {
 	SendMessage(ctx context.Context, in SendMessageInput) error
+	SendMulticast(ctx context.Context, in SendMulticastInput) error
 	VerifyWebhook(signature string, body []byte, channelSecret string) error
 	ParseWebhook(body []byte) ([]InboundEvent, error)
+	ForwardEvents(ctx context.Context, callbackURL string, events []InboundEvent) error
 }
 
 type lineClientImpl struct {
@@ -61,17 +77,31 @@ func (c *lineClientImpl) SendMessage(ctx context.Context, in SendMessageInput) e
 			{"type": "text", "text": in.Text},
 		},
 	}
+	return c.postMessaging(ctx, "https://api.line.me/v2/bot/message/push", in.AccessToken, payload)
+}
+
+func (c *lineClientImpl) SendMulticast(ctx context.Context, in SendMulticastInput) error {
+	payload := map[string]interface{}{
+		"to": in.RecipientIDs,
+		"messages": []map[string]string{
+			{"type": "text", "text": in.Text},
+		},
+	}
+	return c.postMessaging(ctx, "https://api.line.me/v2/bot/message/multicast", in.AccessToken, payload)
+}
+
+func (c *lineClientImpl) postMessaging(ctx context.Context, url, accessToken string, payload map[string]interface{}) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("marshal push message: %w", err)
+		return fmt.Errorf("marshal messaging payload: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.line.me/v2/bot/message/push", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+in.AccessToken)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -113,8 +143,9 @@ func (c *lineClientImpl) VerifyWebhook(signature string, body []byte, channelSec
 func (c *lineClientImpl) ParseWebhook(body []byte) ([]InboundEvent, error) {
 	var payload struct {
 		Events []struct {
-			Type    string `json:"type"`
-			Message struct {
+			Type       string `json:"type"`
+			ReplyToken string `json:"replyToken"`
+			Message    struct {
 				ID   string `json:"id"`
 				Type string `json:"type"`
 				Text string `json:"text"`
@@ -130,15 +161,54 @@ func (c *lineClientImpl) ParseWebhook(body []byte) ([]InboundEvent, error) {
 
 	out := make([]InboundEvent, 0, len(payload.Events))
 	for _, ev := range payload.Events {
-		if ev.Type != "message" || ev.Message.Type != "text" {
-			continue
+		switch ev.Type {
+		case EventTypeMessage:
+			if ev.Message.Type != "text" {
+				continue
+			}
+			out = append(out, InboundEvent{
+				Type:       ev.Type,
+				UserID:     ev.Source.UserID,
+				ReplyToken: ev.ReplyToken,
+				MessageID:  ev.Message.ID,
+				Text:       ev.Message.Text,
+			})
+		case EventTypeFollow, EventTypeUnfollow:
+			// A follow is LINE's "user added the OA as a friend" signal; there is
+			// nothing to accept, so it is forwarded for the calling app to greet.
+			out = append(out, InboundEvent{
+				Type:       ev.Type,
+				UserID:     ev.Source.UserID,
+				ReplyToken: ev.ReplyToken,
+			})
 		}
-		out = append(out, InboundEvent{
-			Type:      ev.Type,
-			UserID:    ev.Source.UserID,
-			MessageID: ev.Message.ID,
-			Text:      ev.Message.Text,
-		})
 	}
 	return out, nil
+}
+
+func (c *lineClientImpl) ForwardEvents(ctx context.Context, callbackURL string, events []InboundEvent) error {
+	payload, err := json.Marshal(map[string]interface{}{
+		"events": events,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal callback payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, callbackURL, bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("create callback request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("callback request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("callback status %d: %s", resp.StatusCode, string(b))
+	}
+	return nil
 }

@@ -45,6 +45,7 @@ Location: [`app/gateway/`](../app/gateway/)
 | `/comms/facebook/**` | `facebook-service:8081/**` | JWT on `/api/v1/**` except webhooks + healthz |
 | `/comms/line/**` | `line-service:8083/**` | same |
 | `/comms/lazada/**` | `lazada-service:8084/**` | same |
+| `/comms/telegram/**` | `telegram-service:8087/**` | same |
 | `GET /comms/**/api/v1/healthz` | platform service | public |
 | `POST/GET /comms/**/api/v1/webhooks` | platform service | public |
 
@@ -102,6 +103,7 @@ spring.cloud.gateway.routes:
 | `GATEWAY_JWT_HMAC_SECRET` | JWT HMAC validation |
 | `FACEBOOK_SERVICE_URI` | Upstream facebook-service |
 | `LINE_SERVICE_URI` | Upstream line-service |
+| `TELEGRAM_SERVICE_URI` | Upstream telegram-service |
 | `LAZADA_SERVICE_URI` | Upstream lazada-service |
 | `GATEWAY_CORS_ALLOWED_ORIGINS` | Browser origins |
 
@@ -125,6 +127,7 @@ Webhooks return plain `200 OK` (vendor requirement).
 |-------|-----|
 | Gateway | `GET /actuator/health` |
 | Line (via gateway) | `GET /comms/line/api/v1/healthz` |
+| Telegram (via gateway) | `GET /comms/telegram/api/v1/healthz` |
 | Lazada (via gateway) | `GET /comms/lazada/api/v1/healthz` |
 
 ---
